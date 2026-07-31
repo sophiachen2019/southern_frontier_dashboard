@@ -1,0 +1,11 @@
+altair
+beautifulsoup4
+google-genai
+pandas
+psycopg2-binary
+pydantic
+pytrends
+python-dotenv
+requests
+streamlit
+youtube-transcript-api
