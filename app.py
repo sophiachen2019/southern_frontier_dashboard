@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timedelta
 from html import escape
 import altair as alt
+import base64
 import pandas as pd
 import streamlit as st
 import psycopg2
@@ -810,22 +811,29 @@ def render_portfolio_brief():
 
 
 def render_page_header():
-    left, right = st.columns([1, 4])
-    with left:
-        if os.path.exists(BRAND_LOGO_PATH):
-            st.image(BRAND_LOGO_PATH, width=100)
-    with right:
-        st.markdown(
-            """
-            <div class="sf-eyebrow">Southern Frontier Strategy Intelligence</div>
-            <h1 class="title-text" style="margin:0;">Market Entry Dashboard</h1>
-            <div class="small-muted">
-                Branding, audience, competitor, and GTM signals for bringing ancient-tree Pu'er
-                into the US market through modern ritual, transparent sourcing, and grounded energy.
+    if os.path.exists(BRAND_LOGO_PATH):
+        with open(BRAND_LOGO_PATH, "rb") as img_file:
+            img_base64 = base64.b64encode(img_file.read()).decode()
+        img_html = f'<img src="data:image/png;base64,{img_base64}" width="150" style="margin-right: 20px; flex-shrink: 0;" />'
+    else:
+        img_html = ""
+
+    st.markdown(
+        f"""
+        <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+            {img_html}
+            <div>
+                <div class="sf-eyebrow">Southern Frontier Strategy Intelligence</div>
+                <h1 class="title-text" style="margin:0;">Market Entry Dashboard</h1>
+                <div class="small-muted">
+                    Branding, audience, competitor, and GTM signals for bringing ancient-tree Pu'er
+                    into the US market through modern ritual, transparent sourcing, and grounded energy.
+                </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_brand_intro():
