@@ -814,7 +814,7 @@ def render_page_header():
     if os.path.exists(BRAND_LOGO_PATH):
         with open(BRAND_LOGO_PATH, "rb") as img_file:
             img_base64 = base64.b64encode(img_file.read()).decode()
-        img_html = f'<img src="data:image/png;base64,{img_base64}" width="150" style="margin-right: 20px; flex-shrink: 0;" />'
+        img_html = f'<img src="data:image/png;base64,{img_base64}" width="220" style="margin-right: 20px; flex-shrink: 0;" />'
     else:
         img_html = ""
 
