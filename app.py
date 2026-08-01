@@ -813,7 +813,7 @@ def render_page_header():
     left, right = st.columns([1, 4])
     with left:
         if os.path.exists(BRAND_LOGO_PATH):
-            st.image(BRAND_LOGO_PATH, width=220)
+            st.image(BRAND_LOGO_PATH, width=100)
     with right:
         st.markdown(
             """
