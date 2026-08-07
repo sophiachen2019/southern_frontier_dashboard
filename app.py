@@ -84,37 +84,64 @@ st.set_page_config(page_title="Southern Frontier Dashboard", layout="wide", page
 
 st.markdown("""
 <style>
-    .stApp { background-color: #FAF8F4; color: #1A1A1A; }
-    .reportview-container { background-color: #FAF8F4; color: #1A1A1A; font-family: 'Inter', sans-serif; }
-    .metric-card { background: white; padding: 24px; border-radius: 8px; box-shadow: 0 4px 20px rgba(160,68,45,0.08); border-left: 4px solid #A0442D; margin-bottom: 16px; }
-    .metric-angle { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1.5px; color: #666; margin-bottom: 8px; }
-    .metric-h1 { font-size: 1.8rem; font-weight: 700; color: #1A1A1A; margin-bottom: 4px; }
-    .metric-h2 { font-size: 1.2rem; font-weight: 400; color: #4A4A4A; margin-bottom: 16px; }
-    .metric-rationale { font-size: 0.95rem; color: #555; font-style: italic; padding-top: 12px; border-top: 1px solid #EEE; }
+    .stApp { background-color: #FAF8F4; color: #1A1A1A; font-size: 16.5px; }
+    .reportview-container { background-color: #FAF8F4; color: #1A1A1A; font-family: 'Inter', sans-serif; font-size: 16.5px; }
+    
+    /* Streamlit Global Typography Overrides */
+    .stMarkdown p, .stMarkdown li { font-size: 1.1rem !important; line-height: 1.68; color: #2C302C; }
+    .stMarkdown h1 { font-size: 2.2rem !important; font-weight: 750; color: #1A1A1A; }
+    .stMarkdown h2 { font-size: 1.7rem !important; font-weight: 720; color: #1A1A1A; }
+    .stMarkdown h3 { font-size: 1.35rem !important; font-weight: 680; color: #1A1A1A; }
+    .stMarkdown h4 { font-size: 1.18rem !important; font-weight: 650; color: #1A1A1A; }
+    
+    /* Tabs & Controls */
+    button[data-baseweb="tab"] p, button[data-baseweb="tab"] div { font-size: 1.08rem !important; font-weight: 600; }
+    [data-testid="stCaptionContainer"], .stCaption { font-size: 0.96rem !important; line-height: 1.55; color: #6E6258 !important; }
+    [data-testid="stMetricValue"] { font-size: 2.1rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 1.05rem !important; }
+    [data-testid="stExpander"] { font-size: 1.05rem !important; }
+
+    /* Custom Component Cards & Metrics */
+    .metric-card { background: white; padding: 26px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(160,68,45,0.08); border-left: 4px solid #A0442D; margin-bottom: 18px; }
+    .metric-angle { font-size: 0.98rem; text-transform: uppercase; letter-spacing: 1.5px; color: #666; margin-bottom: 8px; font-weight: 600; }
+    .metric-h1 { font-size: 2.1rem; font-weight: 700; color: #1A1A1A; margin-bottom: 6px; line-height: 1.25; }
+    .metric-h2 { font-size: 1.35rem; font-weight: 400; color: #4A4A4A; margin-bottom: 16px; line-height: 1.4; }
+    .metric-rationale { font-size: 1.05rem; color: #4A4A4A; font-style: italic; padding-top: 14px; border-top: 1px solid #EEE; line-height: 1.6; }
     .title-text { font-family: 'Playfair Display', serif; color: #1A1A1A; }
-    .story-card { background: #FFFFFF; border: 1px solid #E7E3DA; border-radius: 8px; padding: 20px 22px; margin: 14px 0 18px; }
-    .story-label { color: #A0442D; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px; }
-    .story-title { color: #1A1A1A; font-size: 1.15rem; font-weight: 720; margin-bottom: 8px; }
-    .story-body { color: #3F433F; font-size: 0.98rem; line-height: 1.55; margin-bottom: 12px; }
-    .story-rationale { color: #5B625C; font-size: 0.92rem; line-height: 1.5; border-top: 1px solid #EEE9DF; padding-top: 10px; }
-    .callout { background: #F2F1EF; border-left: 4px solid #A0442D; border-radius: 6px; padding: 14px 16px; color: #353A35; line-height: 1.5; margin: 10px 0 16px; }
-    .evidence-pill { display: inline-block; background: #FFFDF7; color: #A0442D; border: 1px solid #E8D4A4; border-radius: 999px; padding: 4px 10px; margin: 2px 4px 2px 0; font-size: 0.82rem; }
-    .brand-panel { background: #1A1A1A; color: #FAF8F4; border-radius: 8px; padding: 26px 28px; margin: 18px 0 22px; border-top: 4px solid #A0442D; }
-    .brand-kicker { color: #D9BD7E; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.4px; margin-bottom: 10px; }
-    .brand-title { font-size: 1.45rem; font-weight: 760; line-height: 1.25; margin-bottom: 10px; }
-    .brand-body { color: #EEE9DF; font-size: 0.98rem; line-height: 1.6; max-width: 920px; }
-    .brand-values { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
-    .brand-value { border: 1px solid rgba(217,189,126,0.55); border-radius: 999px; padding: 6px 12px; color: #FFF9EC; font-size: 0.84rem; }
-    .brand-philosophy { color: #D9BD7E; font-size: 1.08rem; font-weight: 760; margin-top: 18px; }
-    .brief-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 14px 0 18px; }
-    .brief-cell { background: #FFFFFF; border: 1px solid #E7E3DA; border-radius: 8px; padding: 13px 14px; min-height: 126px; }
-    .brief-label { color: #A0442D; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; margin-bottom: 8px; }
-    .brief-text { color: #353A35; font-size: 0.9rem; line-height: 1.42; }
-    .sf-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 8px 0 12px; border-bottom: 1px solid #E9E1D2; margin-bottom: 18px; }
+    
+    /* Narrative Story Cards */
+    .story-card { background: #FFFFFF; border: 1px solid #E7E3DA; border-radius: 8px; padding: 24px 26px; margin: 16px 0 20px; }
+    .story-label { color: #A0442D; font-size: 0.86rem; font-weight: 750; text-transform: uppercase; letter-spacing: 1.3px; margin-bottom: 8px; }
+    .story-title { color: #1A1A1A; font-size: 1.32rem; font-weight: 750; margin-bottom: 10px; line-height: 1.35; }
+    .story-body { color: #323632; font-size: 1.12rem; line-height: 1.68; margin-bottom: 14px; }
+    .story-rationale { color: #555B56; font-size: 1.02rem; line-height: 1.6; border-top: 1px solid #EEE9DF; padding-top: 12px; }
+    
+    /* Callouts, Pills & Badges */
+    .callout { background: #F2F1EF; border-left: 4px solid #A0442D; border-radius: 6px; padding: 16px 20px; color: #2F332F; line-height: 1.62; font-size: 1.08rem; margin: 12px 0 18px; }
+    .evidence-pill { display: inline-block; background: #FFFDF7; color: #A0442D; border: 1px solid #E8D4A4; border-radius: 999px; padding: 5px 12px; margin: 3px 5px 3px 0; font-size: 0.92rem; font-weight: 500; }
+    
+    /* Brand Philosophy Banner */
+    .brand-panel { background: #1A1A1A; color: #FAF8F4; border-radius: 8px; padding: 30px 32px; margin: 20px 0 24px; border-top: 4px solid #A0442D; }
+    .brand-kicker { color: #D9BD7E; font-size: 0.86rem; font-weight: 750; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+    .brand-title { font-size: 1.65rem; font-weight: 760; line-height: 1.3; margin-bottom: 12px; }
+    .brand-body { color: #EEE9DF; font-size: 1.12rem; line-height: 1.68; max-width: 960px; }
+    .brand-values { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+    .brand-value { border: 1px solid rgba(217,189,126,0.55); border-radius: 999px; padding: 7px 14px; color: #FFF9EC; font-size: 0.95rem; }
+    .brand-philosophy { color: #D9BD7E; font-size: 1.22rem; font-weight: 760; margin-top: 20px; }
+    
+    /* Executive Briefing Grid */
+    .brief-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 16px 0 20px; }
+    .brief-cell { background: #FFFFFF; border: 1px solid #E7E3DA; border-radius: 8px; padding: 15px 16px; min-height: 136px; }
+    .brief-label { color: #A0442D; font-size: 0.82rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px; }
+    .brief-text { color: #2D322E; font-size: 1.02rem; line-height: 1.5; }
+    
+    /* Header & Meta Notes */
+    .sf-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 8px 0 14px; border-bottom: 1px solid #E9E1D2; margin-bottom: 20px; }
     .sf-logo-wrap { background: #FFFFFF; border: 1px solid #E9E1D2; border-radius: 8px; padding: 10px 14px; width: fit-content; }
-    .sf-eyebrow { color: #A0442D; text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.72rem; font-weight: 800; margin-bottom: 4px; }
-    .small-muted { color: #6E6258; font-size: 0.9rem; line-height: 1.45; }
-    .source-note { color: #6E6258; font-size: 0.84rem; line-height: 1.45; margin: 4px 0 14px; }
+    .sf-eyebrow { color: #A0442D; text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.82rem; font-weight: 800; margin-bottom: 4px; }
+    .small-muted { color: #60574F; font-size: 0.98rem; line-height: 1.55; }
+    .source-note { color: #60574F; font-size: 0.94rem; line-height: 1.55; margin: 4px 0 14px; }
+    
     @media (max-width: 1100px) { .brief-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 680px) { .brief-grid { grid-template-columns: 1fr; } }
 </style>
