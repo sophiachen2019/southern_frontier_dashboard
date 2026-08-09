@@ -871,6 +871,188 @@ def render_portfolio_brief():
                 st.caption(text)
 
 
+def render_question_framework():
+    questions = pd.DataFrame([
+        {
+            "Market Question": "Do US consumers already know Pu'er?",
+            "Useful Signal": "Google Trends, spelling variants, adjacent beverage terms",
+            "Dashboard Read": "Category Awareness",
+            "Decision": "Lead with Pu'er directly or borrow intent from matcha, coffee alternatives, wellness, and ritual beverages.",
+        },
+        {
+            "Market Question": "What makes Pu'er feel attractive or intimidating?",
+            "Useful Signal": "People Also Ask, YouTube transcripts, LLM-coded themes",
+            "Dashboard Read": "Consumer Perception",
+            "Decision": "Decide what education, reassurance, and first-use guidance the brand must provide.",
+        },
+        {
+            "Market Question": "Where is the competitive gap?",
+            "Useful Signal": "Shopify product feeds, price bands, Modern Authenticity scoring",
+            "Dashboard Read": "Competitor Gap",
+            "Decision": "Identify whether Southern Frontier can own modern craft with authentic roots.",
+        },
+        {
+            "Market Question": "Where should early tests happen?",
+            "Useful Signal": "Census ACS income, population density, education proxy, Asian diaspora share",
+            "Dashboard Read": "Early Markets",
+            "Decision": "Prioritize metros for paid tests, creator outreach, tastings, pop-ups, or cafe partnerships.",
+        },
+        {
+            "Market Question": "What should we test before investing more?",
+            "Useful Signal": "Experiment backlog, value-prop tests, decision log",
+            "Dashboard Read": "Learning Loop",
+            "Decision": "Turn insights into small tests before committing to ecommerce, partnerships, or physical build-out.",
+        },
+    ])
+    show_table(
+        questions,
+        "Analyst-defined market-entry question framework.",
+        "This is the dashboard spine: question -> signal -> insight -> decision.",
+        full_text=True,
+    )
+
+
+def render_signal_map():
+    signals = pd.DataFrame([
+        {
+            "Decision Area": "Category awareness",
+            "Signal": "Search interest and spelling fragmentation",
+            "Source": "Google Trends via pytrends",
+            "Why It Matters": "Shows whether Pu'er has existing category vocabulary or needs an adjacent-entry strategy.",
+        },
+        {
+            "Decision Area": "Consumer perception",
+            "Signal": "Questions, anxieties, benefits, and ritual language",
+            "Source": "Google PAA, YouTube transcripts, Gemini scoring",
+            "Why It Matters": "Reveals what the website, creators, and tastings need to explain first.",
+        },
+        {
+            "Decision Area": "Competitor landscape",
+            "Signal": "Observed products, prices, descriptions, and positioning scores",
+            "Source": "Shopify feeds and LLM scoring",
+            "Why It Matters": "Identifies the gap between expertise without accessibility and polish without depth.",
+        },
+        {
+            "Decision Area": "Launch geography",
+            "Signal": "Income, population, education proxy, Asian population percentage",
+            "Source": "US Census ACS",
+            "Why It Matters": "Ranks where early paid media, tasting, partner, and creator tests may learn fastest.",
+        },
+        {
+            "Decision Area": "GTM learning",
+            "Signal": "Hypothesis, audience, channel, metric, result, decision",
+            "Source": "Dashboard experiment and decision tables",
+            "Why It Matters": "Keeps strategy iterative instead of treating research as a static conclusion.",
+        },
+    ])
+    show_table(
+        signals,
+        "Current public-data and dashboard-generated signal map.",
+        "Use this to explain the methodology at a business level without overwhelming readers with implementation details.",
+        full_text=True,
+    )
+
+
+def render_insight_chain(label, signal, interpretation, takeaway, test):
+    st.markdown(
+        f"""
+        <div class="story-card">
+            <div class="story-label">{escape(label)}</div>
+            <div class="story-title">{escape(takeaway)}</div>
+            <div class="story-body"><strong>Signal:</strong> {escape(signal)}</div>
+            <div class="story-body"><strong>Interpretation:</strong> {escape(interpretation)}</div>
+            <div class="story-rationale"><strong>Recommended test:</strong> {escape(test)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_strategic_insight_overview(signal_summary, comp_summary, launch_market_df):
+    consumer_signal = "PAA and YouTube snippets are scored for transparency, ritual, and grounded-energy desire."
+    consumer_interpretation = "Pu'er needs translation: the strongest message should lower the education burden while keeping the product premium."
+    consumer_takeaway = "Make ancient tea feel approachable, useful, and modern."
+    consumer_test = "Test education-first vs product-first landing sections using signup rate, scroll depth, and tasting interest."
+    if signal_summary:
+        consumer_signal = f"The leading scored consumer vector is {signal_summary['top_signal']} at {signal_summary['top_score']:.1f}/10."
+        consumer_takeaway = f"Lead with {signal_summary['top_signal']} as the first message hypothesis."
+        consumer_test = f"Test a {signal_summary['top_signal']} hero against a heritage-led hero and compare qualified signup rate."
+
+    competitor_signal = "Competitor feeds and Modern Authenticity scoring show mixed ability to balance depth with accessibility."
+    competitor_takeaway = "Position Southern Frontier in the gap between connoisseur tea and generic wellness."
+    competitor_interpretation = "The opportunity is not only better tea; it is clearer translation, visual trust, and a more usable first purchase."
+    if comp_summary:
+        competitor_signal = f"The current set has {comp_summary['products']} products across {comp_summary['vendors']} vendors, with average Modern Authenticity of {comp_summary['avg_positioning_label']}."
+        competitor_takeaway = "Own modern craft with authentic roots."
+
+    market_signal = "Census scoring ranks metros by premium launch potential."
+    market_interpretation = "The highest-scoring markets are learning environments, not automatic store locations."
+    market_takeaway = "Use early markets for tests before physical expansion decisions."
+    market_test = "Run geo-targeted signup or tasting-RSVP campaigns in the top 3-5 metros."
+    if not launch_market_df.empty:
+        top_market = launch_market_df.iloc[0]["geography"].replace(" Metro Area", "").replace(" Micro Area", "")
+        market_signal = f"The current launch-market model ranks {top_market} first."
+        market_test = f"Use {top_market} as one paid-media or partnership test cell, then compare against other high-scoring metros."
+
+    render_insight_chain(
+        "Category Awareness",
+        "Pu'er demand is fragmented across spellings and much smaller than adjacent beverage behaviors.",
+        "Most US consumers do not have stable category vocabulary yet.",
+        "Capture adjacent intent before expecting direct Pu'er search demand.",
+        "Compare coffee alternative, matcha alternative, gut-health tea, and daily-ritual landing-page angles.",
+    )
+    render_insight_chain(
+        "Consumer Perception",
+        consumer_signal,
+        consumer_interpretation,
+        consumer_takeaway,
+        consumer_test,
+    )
+    render_insight_chain(
+        "Competitor Gap",
+        competitor_signal,
+        competitor_interpretation,
+        competitor_takeaway,
+        "Compare modern-accessible copy against heritage-heavy copy and measure comprehension, signup, and partner inquiry.",
+    )
+    render_insight_chain(
+        "Early Markets",
+        market_signal,
+        market_interpretation,
+        market_takeaway,
+        market_test,
+    )
+
+
+def render_staged_gtm_strategy():
+    strategy = pd.DataFrame([
+        {
+            "Stage": "1. Website as education and trust hub",
+            "Role": "Explain Pu'er, build credibility, capture early intent.",
+            "Primary Assets": "Brand story, Discover Pu'er content, message tests, newsletter, tasting interest, partnership inquiry.",
+            "What To Measure": "Signup rate, scroll depth, quiz starts, inquiry rate, feedback quality.",
+        },
+        {
+            "Stage": "2. Physical experience as proof lab",
+            "Role": "Let people taste, smell, understand, photograph, and trust the product.",
+            "Primary Assets": "Pop-up, tasting, cafe partnership, Pu'er latte, tea flight, QR capture.",
+            "What To Measure": "Drink-to-email conversion, tasting RSVP, repeat drink behavior, UGC, partner leads.",
+        },
+        {
+            "Stage": "3. Ecommerce as scale path",
+            "Role": "Scale what has already shown intent instead of launching on assumptions.",
+            "Primary Assets": "Discovery sampler, gift bundle, Pu'er latte kit, cold brew, subscription or replenishment.",
+            "What To Measure": "Add-to-cart, conversion, repeat purchase, bundle preference, subscription intent.",
+        },
+    ])
+    show_table(
+        strategy,
+        "Synthesized GTM model from brand context, consumer signals, competitor landscape, and cafe bridge analysis.",
+        "This keeps ecommerce as a later scale path until the value proposition has stronger prelaunch signal.",
+        full_text=True,
+    )
+
+
 def render_page_header():
     if os.path.exists(BRAND_LOGO_PATH):
         with open(BRAND_LOGO_PATH, "rb") as img_file:
@@ -1095,22 +1277,34 @@ indexed_trends_df = build_indexed_trends(trends_df)
 puer_composite_df = build_puer_composite(trends_df)
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "Market Story",
-    "Audience & Whitespace",
-    "Cafe & Retail DNA",
+    "Market Questions",
+    "Strategic Insights",
+    "GTM Strategy",
     "Evidence Explorer",
-    "Strategy Engine",
-    "Experiment Tracker",
+    "Message Tests",
+    "Learning Loop",
 ])
 
 with tab1:
-    st.header("Executive Readout")
+    st.header("Market-Entry Question Framework")
     render_story_card(
         "How to read this dashboard",
-        "This is a market-entry intelligence tool, not a demand forecast or sales model.",
-        "Use it to decide what to test, where to test, what to collect next, and how Southern Frontier's brand DNA should translate for US audiences before committing major capital.",
+        "Start with the business questions, then work backward into signals, insights, strategy, and experiments.",
+        "This dashboard is a market-entry intelligence tool, not a demand forecast or sales model. Its job is to make uncertainty easier to act on before Southern Frontier commits major capital.",
         "The strongest evidence should lead to lightweight experiments: waitlist pages, partner outreach, tasting RSVPs, creator briefs, cafe collaborations, and eventually commerce tests."
     )
+    render_question_framework()
+
+    st.header("Signal Map")
+    render_story_card(
+        "From data source to decision",
+        "Each signal exists because it helps answer a market-entry question.",
+        "The dashboard intentionally separates evidence from interpretation. Google Trends, public search snippets, Shopify feeds, Census data, and LLM scoring each answer different types of questions.",
+        "This lets the article show a clean chain: question -> signal -> synthesized insight -> GTM implication -> test."
+    )
+    render_signal_map()
+
+    st.header("Executive Readout")
     st.subheader("One-Page Case Study Summary")
     render_portfolio_brief()
     if signal_summary:
@@ -1179,7 +1373,7 @@ with tab1:
             "Competitor analysis becomes most valuable when it is translated into a positioning map and concrete launch hypotheses."
         )
 
-    st.header("Launch Hypotheses")
+    st.header("Initial Launch Hypotheses")
     render_callout(
         "Use these as the bridge from analytics to action. Each hypothesis should become a scrappy test: a landing page, ad angle, creator brief, waitlist survey, or product bundle."
     )
@@ -1190,6 +1384,15 @@ with tab1:
     )
 
 with tab2:
+    st.header("Strategic Insights")
+    render_story_card(
+        "Dashboard narrative",
+        "The article needs four takeaways, so the dashboard now leads with four matching insight chains.",
+        "Each insight is presented as signal, interpretation, strategic takeaway, and recommended test. The deeper charts and raw tables still live in Evidence Explorer.",
+        "This keeps the dashboard readable for business readers while preserving auditability for data readers."
+    )
+    render_strategic_insight_overview(signal_summary, comp_summary, launch_market_df)
+
     st.header("Audience Segments and Opportunity Whitespace")
     render_story_card(
         "MVP segment model",
@@ -1363,6 +1566,15 @@ with tab2:
         st.info("No Census metro demographics found yet. Run census_pipeline.py after adding CENSUS_API_KEY.")
 
 with tab3:
+    st.header("GTM Strategy")
+    render_story_card(
+        "From insight to market entry",
+        "The recommended strategy is staged: website first, one physical proof lab second, ecommerce later.",
+        "This sequence fits the insight pattern. Pu'er needs education, trust, sensory proof, and smaller tests before it needs a large retail or ecommerce commitment.",
+        "The dashboard should make this strategic implication obvious before users dive into cafe benchmarks or raw evidence."
+    )
+    render_staged_gtm_strategy()
+
     st.header("Cafe & Retail Experience Intelligence")
     render_story_card(
         "Brand DNA",
@@ -1778,9 +1990,9 @@ with tab4:
         )
 
 with tab5:
-    st.subheader("Synthesize Strategy from Data")
+    st.header("Message Tests")
     render_story_card(
-        "From insight to GTM",
+        "From insight to copy hypotheses",
         "This engine turns high-scoring evidence into copy directions for structured tests.",
         "Use the generated outputs as hypotheses, not final brand copy. The best next step is to test them against a brand landing page, waitlist, partner inquiry flow, creator script, tasting RSVP, or paid-social audience.",
         "Every generated rationale should trace back to the highest-alignment records, so the case study can show a clear path from raw text to strategy."
@@ -1830,7 +2042,7 @@ with tab5:
         st.info("No value props generated yet. Click 'Re-generate Value Props' to create your first set.")
 
 with tab6:
-    st.header("GTM Experiment Tracker")
+    st.header("Learning Loop")
     render_story_card(
         "Why this completes the loop",
         "The dashboard should not end at insight. Each finding needs a lightweight market test so you can learn before committing brand, product, or channel budget.",
