@@ -806,6 +806,9 @@ def show_table(df, source, method=None, height="content", column_config=None, hi
     background-color: rgba(0,0,0,0.03);
     font-weight: 600;
     color: #444;
+    resize: horizontal;
+    overflow: auto;
+    min-width: 80px;
 }}
 </style>
 <div style="overflow-x: auto; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px;">
