@@ -768,20 +768,53 @@ def render_website_links(labels):
 
 def show_table(df, source, method=None, height="content", column_config=None, hide_index=True, full_text=False):
     render_source_note(source, method)
-    auto_config = {}
-    if full_text:
-        for col in df.columns:
-            if pd.api.types.is_object_dtype(df[col]):
-                auto_config[col] = st.column_config.TextColumn(col, width="large")
+    display_df = df.copy()
+    
     if column_config:
-        auto_config.update(column_config)
-    table_kwargs = {
-        "width": "stretch",
-        "hide_index": hide_index,
-        "height": height,
-        "column_config": auto_config,
-    }
-    st.dataframe(df, **table_kwargs)
+        for col, config in column_config.items():
+            if col in display_df.columns:
+                if isinstance(config, dict):
+                    if config.get("type_config", {}).get("type") == "link":
+                        display_df[col] = display_df[col].apply(
+                            lambda x: f'<a href="{x}" target="_blank">Link</a>' if pd.notnull(x) and x != "" else ""
+                        )
+                    if "label" in config and config["label"] is not None:
+                        display_df = display_df.rename(columns={col: config["label"]})
+                elif isinstance(config, str):
+                    display_df = display_df.rename(columns={col: config})
+
+    html = display_df.to_html(escape=False, index=not hide_index)
+    st.markdown(
+        f"""
+        <style>
+        .sf-wrap-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+            background-color: white;
+            border-radius: 4px;
+            overflow: hidden;
+        }}
+        .sf-wrap-table th, .sf-wrap-table td {{
+            text-align: left;
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            word-wrap: break-word;
+            white-space: normal;
+        }}
+        .sf-wrap-table th {{
+            background-color: rgba(0,0,0,0.03);
+            font-weight: 600;
+            color: #444;
+        }}
+        </style>
+        <div style="overflow-x: auto; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px;">
+            {html.replace('<table border="1" class="dataframe">', '<table class="sf-wrap-table">')}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 def render_story_card(label, title, body, rationale=None):
