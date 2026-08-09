@@ -1801,17 +1801,33 @@ with tab_competitors:
                     "Vendor positioning score = average positioning_score across observed products for that vendor. This is a proxy until brand-level visual/site analysis is added.",
                 )
 
-                st.subheader("Modern Authenticity by Pu'er Specialist Vendors")
+                st.subheader("Pu'er Landscape by Vendor (Pu'er Products Only)")
                 render_story_card(
-                    "Pu'er Landscape",
-                    "This chart filters the above view to only include dedicated Pu'er and specialty Chinese tea vendors.",
-                    "Comparing these vendors shows the pure-play competitive landscape Southern Frontier is entering.",
-                    "Notice if any pure-play vendors occupy the high-authenticity + high-accessibility quadrant."
+                    "Pu'er Benchmarking",
+                    "This chart filters the dataset to only include Pu'er tea products, showing the average price and authenticity for Pu'er items across all vendors.",
+                    "Comparing these vendors shows the competitive landscape Southern Frontier is entering.",
+                    "Notice if any vendors occupy the high-authenticity + high-accessibility quadrant."
                 )
-                puer_specialists = ["White2Tea", "Crimson Lotus Tea", "Yunnan Sourcing", "Farmerleaf", "Kuura"]
-                puer_plot_df = plot_df[plot_df["Vendor"].isin(puer_specialists)]
                 
-                if not puer_plot_df.empty:
+                puer_mask = bubble_source_df["title"].str.lower().str.contains("puer|pu'er|pu-erh|pu erh|puerh", na=False) | \
+                            bubble_source_df["product_type"].str.lower().str.contains("puer|pu'er|pu-erh|pu erh|puerh", na=False) | \
+                            bubble_source_df["description"].str.lower().str.contains("puer|pu'er|pu-erh|pu erh|puerh", na=False) | \
+                            bubble_source_df["vendor"].str.lower().str.contains("puer|pu'er|pu-erh|pu erh|puerh", na=False)
+                
+                puer_bubble_source = bubble_source_df[puer_mask]
+                
+                if not puer_bubble_source.empty:
+                    puer_plot_df = puer_bubble_source.groupby("vendor").agg(
+                        avg_price_usd=("price_usd", "mean"),
+                        avg_positioning_score=("positioning_score", "mean"),
+                        products=("vendor", "size"),
+                    ).reset_index().rename(columns={
+                        "vendor": "Vendor",
+                        "avg_price_usd": "Avg Price USD",
+                        "avg_positioning_score": "Avg Modern Authenticity",
+                        "products": "Observed Products",
+                    })
+                    
                     base_chart_puer = alt.Chart(puer_plot_df).encode(
                         x=alt.X("Avg Price USD:Q", title="Average Observed Product Price, USD"),
                         y=alt.Y("Avg Modern Authenticity:Q", title="Average Modern Authenticity Score", scale=alt.Scale(domain=[0, 10])),
