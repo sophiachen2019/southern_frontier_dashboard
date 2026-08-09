@@ -1606,24 +1606,6 @@ with tab_macro:
         benchmark_df = trends_for_chart[trends_for_chart["family"] == "Adjacent benchmark"]
         puer_df = trends_for_chart[trends_for_chart["family"] == "Pu'er variants"]
 
-        if not benchmark_df.empty:
-            st.markdown("**Adjacent Benchmark Terms**")
-            max_date = benchmark_df['date'].max()
-            label_df = benchmark_df[benchmark_df['date'] == max_date]
-            bench_chart = alt.Chart(benchmark_df).mark_line(strokeWidth=2).encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("interest:Q", title="Search Interest"),
-                color=alt.Color("keyword:N", title="Keyword", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"])),
-                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("interest:Q")],
-            )
-            labels = alt.Chart(label_df).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
-                x=alt.X("date:T"),
-                y=alt.Y("interest:Q"),
-                text="keyword:N",
-                color=alt.Color("keyword:N", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"]))
-            )
-            st.altair_chart((bench_chart + labels).properties(height=320), width="stretch")
-
         if not puer_df.empty:
             strongest_spelling = puer_df.groupby('keyword')['interest'].mean().idxmax()
             st.markdown(f"**Pu'er Spelling Variants** (Strongest: `{strongest_spelling}`)")
@@ -1643,24 +1625,23 @@ with tab_macro:
             )
             st.altair_chart((puer_chart + labels_puer).properties(height=320), width="stretch")
 
-        if not puer_composite_df.empty:
-            st.markdown("**Pu'er Composite Demand Signal**")
-            comp_melt = puer_composite_df.melt(id_vars=["date"], var_name="metric", value_name="interest")
-            max_date_comp = comp_melt['date'].max()
-            label_df_comp = comp_melt[comp_melt['date'] == max_date_comp]
-            comp_chart = alt.Chart(comp_melt).mark_line(strokeWidth=2).encode(
+        if not benchmark_df.empty:
+            st.markdown("**Adjacent Benchmark Terms**")
+            max_date = benchmark_df['date'].max()
+            label_df = benchmark_df[benchmark_df['date'] == max_date]
+            bench_chart = alt.Chart(benchmark_df).mark_line(strokeWidth=2).encode(
                 x=alt.X("date:T", title="Date"),
-                y=alt.Y("interest:Q", title="Interest"),
-                color=alt.Color("metric:N", title="Metric", scale=alt.Scale(range=["#A0442D", "#2B4533"])),
-                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("metric:N"), alt.Tooltip("interest:Q")],
+                y=alt.Y("interest:Q", title="Search Interest"),
+                color=alt.Color("keyword:N", title="Keyword", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"])),
+                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("interest:Q")],
             )
-            labels_comp = alt.Chart(label_df_comp).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
+            labels = alt.Chart(label_df).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
                 x=alt.X("date:T"),
                 y=alt.Y("interest:Q"),
-                text="metric:N",
-                color=alt.Color("metric:N", scale=alt.Scale(range=["#A0442D", "#2B4533"]))
+                text="keyword:N",
+                color=alt.Color("keyword:N", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"]))
             )
-            st.altair_chart((comp_chart + labels_comp).properties(height=320), width="stretch")
+            st.altair_chart((bench_chart + labels).properties(height=320), width="stretch")
 
         clean_indexed_trends_df = indexed_trends_df.dropna(subset=["date", "indexed_interest", "keyword"]) if not indexed_trends_df.empty else pd.DataFrame()
         if not clean_indexed_trends_df.empty:
