@@ -1569,6 +1569,37 @@ with tab4:
         "This is a directional content-quality score, not a consumer survey. It should be audited with examples and eventually calibrated against human labels."
     )
     if not comp_df.empty:
+        if "positioning_score" in comp_df.columns and "vendor" in comp_df.columns:
+            st.subheader("Modern Authenticity by Vendor")
+            render_story_card(
+                "Authenticity spread",
+                "This view shows the distribution of Modern Authenticity scores for individual products across vendors.",
+                "The red lines indicate the vendor's average score.",
+            )
+            stripplot = alt.Chart(comp_df).mark_circle(size=50, opacity=0.5, color="#6E6258").encode(
+                x=alt.X("vendor:N", title="Vendor", axis=alt.Axis(labelAngle=-45)),
+                xOffset="jitter:Q",
+                y=alt.Y("positioning_score:Q", title="Modern Authenticity Score", scale=alt.Scale(domain=[0, 10])),
+                tooltip=["vendor:N", "title:N", "positioning_score:Q"]
+            ).transform_calculate(jitter="random()")
+            
+            avg_plot = alt.Chart(comp_df).mark_tick(
+                color="#A0442D",
+                thickness=3,
+                size=40
+            ).encode(
+                x=alt.X("vendor:N"),
+                y=alt.Y("mean(positioning_score):Q", title="Modern Authenticity Score"),
+                tooltip=[alt.Tooltip("vendor:N"), alt.Tooltip("mean(positioning_score):Q", format=".1f", title="Average Score")]
+            )
+            
+            st.altair_chart((stripplot + avg_plot).properties(height=400), use_container_width=True)
+            
+            render_source_note(
+                "Individual products (dots) and vendor average (red line).",
+                "Stored in competitor_products, scored by Gemini."
+            )
+
         st.subheader("Average Price by Vendor and Product Type")
         if {"vendor", "product_type", "price_usd"}.issubset(comp_df.columns):
             price_df = comp_df.groupby(['vendor', 'product_type'])['price_usd'].mean().reset_index()
