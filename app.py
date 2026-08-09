@@ -25,7 +25,7 @@ WEBSITE_LINKS = {
     "Flagship Store": f"{SOUTHERN_FRONTIER_WEBSITE_URL}#store",
     "Partnership": f"{SOUTHERN_FRONTIER_WEBSITE_URL}#partner",
 }
-ADJACENT_TREND_KEYWORDS = {"matcha", "specialty coffee", "tea latte", "boba tea", "kombucha"}
+ADJACENT_TREND_KEYWORDS = {"matcha", "specialty coffee", "puer (benchmark)", "boba tea", "kombucha"}
 PUER_TREND_KEYWORDS = {"puer", "puerh", "pu'er", "pu-erh", "pu erh"}
 
 CAFE_EXPERIENCE_COMPETITORS = [
@@ -868,17 +868,18 @@ def render_brand_intro():
         """
         <div class="brand-panel">
             <div class="brand-kicker">Brand Context</div>
-            <div class="brand-title">Ancient Mountain Pu'er. Crafted for Modern Life.</div>
+            <div class="brand-title">A Journey of Resilience: The Pu'er Spirit</div>
             <div class="brand-body">
-                Southern Frontier is a premium Pu'er tea brand built around the Pu'er Spirit:
-                patient, resilient, grounded, and evolving. The brand's mission is to demystify
-                ancient-tree Pu'er from Yunnan and make it transparent, accessible, and joyful
-                for modern daily rituals, from pure tea to approachable Pu'er beverages.
+                Southern Frontier is a Pu'er tea brand built around the Pu'er Spirit:
+                patient, resilient, and always evolving. The brand's mission is to demystify
+                ancient-tree Pu'er and make it transparent, accessible, and joyful for modern life.
+                The tea comes from the mountains, but the spirit belongs anywhere people are
+                learning to adapt, endure, and begin again.
             </div>
             <div class="brand-values">
                 <span class="brand-value">Pure: transparently sourced and tested</span>
-                <span class="brand-value">Power: quiet strength and grounded energy</span>
-                <span class="brand-value">Pleasure: beautiful taste and shareable ritual</span>
+                <span class="brand-value">Power: quiet strength from tea trees and time</span>
+                <span class="brand-value">Pleasure: beautiful taste and modern rituals</span>
             </div>
             <div class="brand-philosophy">Savor Life. Share Life. Salute Life.</div>
         </div>
@@ -997,7 +998,7 @@ def generate_value_props(top_records):
         )
     text_data = "\n\n".join(evidence_blocks)
     prompt = """
-You are a lead growth marketer for 'Southern Frontier', a premium Pu'er tea brand. 
+You are a lead growth marketer for 'Southern Frontier', a Pu'er tea brand. 
 Southern Frontier combines modern, transparent design philosophy (like Blue Bottle) with the resilient, authentic spirit of ancient mountain Pu'er (values: Pure, Power, Pleasure).
 Review the provided consumer friction and intent data from specialty coffee and matcha drinkers. 
 Based strictly on the pain points and aesthetic desires mentioned, generate 3 distinct pieces of marketing copy for upcoming A/B tests. 
@@ -1114,13 +1115,13 @@ with tab1:
                 "average_interest": "Average Interest",
             }),
             "Google Trends via pytrends, stored in google_trends_data.",
-            "First-tab table is restricted to comparable adjacent keywords collected in one benchmark payload: matcha, specialty coffee, tea latte, boba tea, and kombucha. Pu'er variants are shown only in Evidence Explorer.",
+            "First-tab table is restricted to comparable adjacent keywords collected in one benchmark payload: matcha, specialty coffee, puer (benchmark), boba tea, and kombucha. Pu'er variants are shown only in Evidence Explorer.",
         )
     else:
         render_story_card(
             "Adjacent demand context",
             "Comparable benchmark trend data has not been collected yet.",
-            "Once the quantitative pipeline runs, this section should compare familiar adjacent behaviors such as matcha, specialty coffee, tea latte, boba tea, and kombucha.",
+            "Once the quantitative pipeline runs, this section should compare familiar adjacent behaviors such as matcha, specialty coffee, puer (benchmark), boba tea, and kombucha.",
             "Pu'er trend variants belong in the Evidence Explorer because they use a separate Google Trends scale and are best read as awareness and spelling-friction signals."
         )
 

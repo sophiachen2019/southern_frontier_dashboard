@@ -38,11 +38,17 @@ def fetch_google_trends(kw_list):
         )
         pytrends.build_payload(kw_list, cat=0, timeframe='today 12-m', geo='', gprop='')
         df = pytrends.interest_over_time()
-        if not df.empty and 'isPartial' in df.columns:
-            # Drop the incomplete current week to prevent artificial spikes
-            df = df[df['isPartial'] != 'True']
-            df = df[df['isPartial'] != True]
-            df = df.drop(columns=['isPartial'])
+        if not df.empty:
+            if 'isPartial' in df.columns:
+                # Drop the incomplete current week to prevent artificial spikes
+                df = df[df['isPartial'] != 'True']
+                df = df[df['isPartial'] != True]
+                df = df.drop(columns=['isPartial'])
+            
+            # Only include data up to the end of the last completed calendar month
+            current_month = pd.Timestamp.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            df = df[df.index < current_month]
+            
         return df
     except Exception as e:
         print(f"Error fetching Google Trends for {kw_list}: {e}")
@@ -56,12 +62,13 @@ def main():
     records = []
     
     # Keep this benchmark group to five terms so Google Trends returns one shared 0-100 scale.
-    group1 = ["matcha", "specialty coffee", "tea latte", "boba tea", "kombucha"]
+    group1 = ["matcha", "specialty coffee", "puer", "boba tea", "kombucha"]
     df1 = fetch_google_trends(group1)
     if not df1.empty:
         for index, row in df1.iterrows():
             for kw in group1:
-                records.append((index, kw, int(row[kw])))
+                saved_kw = "puer (benchmark)" if kw == "puer" else kw
+                records.append((index, saved_kw, int(row[kw])))
                 
     group2 = ["puerh", "puer", "pu'er", "Pu-erh", "pu erh"]
     df2 = fetch_google_trends(group2)
