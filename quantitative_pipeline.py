@@ -44,10 +44,9 @@ def fetch_google_trends(kw_list):
                 df = df[df['isPartial'] != 'True']
                 df = df[df['isPartial'] != True]
                 df = df.drop(columns=['isPartial'])
-            
-            # Only include data up to the end of the last completed calendar month
-            current_month = pd.Timestamp.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            df = df[df.index < current_month]
+            else:
+                # Fallback: if isPartial is missing, drop the last row as it is usually the incomplete week
+                df = df.iloc[:-1]
             
         return df
     except Exception as e:
