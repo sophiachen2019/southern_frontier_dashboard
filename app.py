@@ -713,6 +713,8 @@ def build_puer_composite(trends_df):
         return pd.DataFrame()
 
     pu_er = trends_df[trends_df["keyword"].str.lower().isin(PUER_TREND_KEYWORDS)].copy()
+    pu_er["interest"] = pd.to_numeric(pu_er["interest"], errors="coerce")
+    pu_er = pu_er.dropna(subset=["date", "interest"])
     if pu_er.empty:
         return pd.DataFrame()
 
@@ -756,19 +758,164 @@ def add_competitor_weight_fields(comp_df):
     return enriched
 
 
-def extract_evidence(top_records, max_items=5):
-    evidence = []
-    for idx, (_, row) in enumerate(top_records.head(max_items).iterrows(), start=1):
-        summary = str(row.get("summary", "")).strip()
-        source_type = str(row.get("source_type", "Source")).strip()
-        source_url = str(row.get("source_url", "")).strip()
-        evidence.append({
-            "id": f"S{idx}",
-            "source_type": source_type,
-            "summary": summary,
-            "source_url": source_url if source_url and source_url != "None" else "",
+def build_value_prop_evidence_packet(
+    top_records,
+    trend_summary,
+    signal_summary,
+    comp_summary,
+    comp_df,
+    cafe_comp_df,
+    launch_market_df,
+    opportunity_df,
+):
+    sections = []
+
+    sections.append({
+        "id": "B1",
+        "title": "Brand Context",
+        "body": (
+            "Southern Frontier is a Pu'er tea brand built around ancient-tree Pu'er, modern daily rituals, "
+            "and the values Pure, Power, Pleasure. The brand should make Pu'er transparent, accessible, "
+            "sensory, and joyful without losing cultural credibility."
+        ),
+    })
+    sections.append({
+        "id": "G1",
+        "title": "GTM Context",
+        "body": (
+            "Current staged strategy: use the website as an education, trust, and lead-capture hub; "
+            "use one physical proof lab such as a pop-up, tasting, or cafe partnership for sensory trust; "
+            "treat ecommerce as a later scale path once value proposition signals are stronger."
+        ),
+    })
+
+    if trend_summary is not None and not trend_summary.empty:
+        top_trends = trend_summary.head(5)
+        trend_lines = [
+            f"{row['keyword']}: latest={row['latest_interest']:.0f}, avg={row['average_interest']:.1f}, change={row['delta']:.0f}"
+            for _, row in top_trends.iterrows()
+        ]
+        sections.append({
+            "id": "M1",
+            "title": "Macro Search Signals",
+            "body": (
+                "Google Trends suggests Pu'er should be interpreted alongside adjacent behaviors and spelling friction. "
+                "Top directional trend rows: " + "; ".join(trend_lines)
+            ),
         })
-    return evidence
+
+    if signal_summary:
+        score_lines = [
+            f"{label.replace('_', ' ')}={score:.1f}/10"
+            for label, score in signal_summary["scores"].items()
+        ]
+        sections.append({
+            "id": "M2",
+            "title": "Consumer Language Signals",
+            "body": (
+                f"The strongest scored consumer-language vector is {signal_summary['top_signal']} "
+                f"({signal_summary['top_score']:.1f}/10). Scorecard: " + "; ".join(score_lines)
+            ),
+        })
+
+    if top_records is not None and not top_records.empty:
+        snippets = []
+        for idx, (_, row) in enumerate(top_records.head(8).iterrows(), start=1):
+            snippets.append(
+                f"S{idx} [{row.get('source_type', 'Source')}]: {row.get('summary', '')}"
+            )
+        sections.append({
+            "id": "M3",
+            "title": "High-Alignment Consumer Snippets",
+            "body": " | ".join(snippets),
+        })
+
+    if comp_summary:
+        sections.append({
+            "id": "C1",
+            "title": "Ecommerce Competitor Summary",
+            "body": (
+                f"Observed ecommerce set: {comp_summary['products']} products across "
+                f"{comp_summary['vendors']} vendors; median observed price {comp_summary['median_price_label']}; "
+                f"average Modern Authenticity {comp_summary['avg_positioning_label']}; "
+                f"{comp_summary['weak_count']} low-scoring whitespace candidates."
+            ),
+        })
+
+    if comp_df is not None and not comp_df.empty and {"vendor", "positioning_score", "price_usd"}.issubset(comp_df.columns):
+        comp_clean = comp_df.copy()
+        comp_clean["positioning_score"] = pd.to_numeric(comp_clean["positioning_score"], errors="coerce")
+        comp_clean["price_usd"] = pd.to_numeric(comp_clean["price_usd"], errors="coerce")
+        vendor_summary = comp_clean.dropna(subset=["vendor", "positioning_score", "price_usd"]).groupby("vendor").agg(
+            avg_price=("price_usd", "mean"),
+            avg_authenticity=("positioning_score", "mean"),
+            products=("vendor", "size"),
+        ).reset_index()
+        if not vendor_summary.empty:
+            weak_vendors = vendor_summary.sort_values("avg_authenticity").head(5)
+            vendor_lines = [
+                f"{row['vendor']}: authenticity={row['avg_authenticity']:.1f}/10, avg_price=${row['avg_price']:.0f}, products={int(row['products'])}"
+                for _, row in weak_vendors.iterrows()
+            ]
+            sections.append({
+                "id": "C2",
+                "title": "Ecommerce Positioning Gaps",
+                "body": (
+                    "Lowest average Modern Authenticity vendors indicate possible whitespace around clearer education, "
+                    "modern craft, and cultural credibility: " + "; ".join(vendor_lines)
+                ),
+            })
+
+    if cafe_comp_df is not None and not cafe_comp_df.empty and "overall_positioning_score" in cafe_comp_df.columns:
+        cafe_top = cafe_comp_df.sort_values("overall_positioning_score", ascending=False).head(5)
+        cafe_lines = [
+            f"{row.get('name', 'Competitor')}: overall={row.get('overall_positioning_score', 0):.1f}, "
+            f"ritual={row.get('ritual_theater_score', 0):.1f}, bridge={row.get('cafe_to_product_bridge_score', 0):.1f}"
+            for _, row in cafe_top.iterrows()
+        ]
+        sections.append({
+            "id": "C3",
+            "title": "Cafe/Retail Experience Benchmarks",
+            "body": (
+                "Cafe and retail benchmarks inform menu, design, ritual theater, to-go/ritual duality, "
+                "and cafe-to-product bridge. Top benchmarks: " + "; ".join(cafe_lines)
+            ),
+        })
+
+    if launch_market_df is not None and not launch_market_df.empty:
+        top_markets = launch_market_df.head(5)
+        market_lines = [
+            f"{row['geography']}: score={row['launch_score']:.1f}, income=${row['median_household_income']:,.0f}, pop={row['population']:,.0f}"
+            for _, row in top_markets.iterrows()
+        ]
+        sections.append({
+            "id": "G2",
+            "title": "GTM Market Prioritization",
+            "body": (
+                "Census ranking informs where to test paid media, creator outreach, tastings, pop-ups, or partnerships. "
+                "Top markets: " + "; ".join(market_lines)
+            ),
+        })
+
+    if opportunity_df is not None and not opportunity_df.empty:
+        opportunity_lines = [
+            f"{row['Segment']}: {row['Opportunity']} / test: {row['Recommended test']}"
+            for _, row in opportunity_df.head(5).iterrows()
+        ]
+        sections.append({
+            "id": "P1",
+            "title": "Prioritized Audience Opportunities",
+            "body": "Top audience/message opportunities: " + "; ".join(opportunity_lines),
+        })
+
+    return sections
+
+
+def format_evidence_packet(sections):
+    return "\n\n".join(
+        f"Source ID: {section['id']}\nTitle: {section['title']}\nEvidence: {section['body']}"
+        for section in sections
+    )
 
 
 def render_source_note(source, method=None):
@@ -953,6 +1100,47 @@ def render_signal_map():
     )
 
 
+def render_dashboard_journey():
+    journey = pd.DataFrame([
+        {
+            "Tab": "1. Market Questions",
+            "Purpose": "Define what the market-entry decision system needs to answer.",
+            "Main Output": "Question framework and signal map.",
+        },
+        {
+            "Tab": "2. Macro Signals",
+            "Purpose": "Read category awareness and consumer language.",
+            "Main Output": "Google Trends, Pu'er spelling friction, YouTube/PAA language, and desire vectors.",
+        },
+        {
+            "Tab": "3. Competitor Intelligence",
+            "Purpose": "Compare ecommerce vendors and cafe/retail benchmarks.",
+            "Main Output": "Pricing, product copy, modern authenticity, menu cues, design cues, and retail experience benchmarks.",
+        },
+        {
+            "Tab": "4. Brand Positioning",
+            "Purpose": "Synthesize macro and competitor evidence into positioning hypotheses.",
+            "Main Output": "Article-ready insight chains, audience priorities, message tests, and value-prop drafts.",
+        },
+        {
+            "Tab": "5. GTM Strategy",
+            "Purpose": "Translate positioning into staged launch choices.",
+            "Main Output": "Website hub, physical proof lab, ecommerce path, Census market prioritization, and data gaps.",
+        },
+        {
+            "Tab": "6. Learning Loop",
+            "Purpose": "Track experiments, results, and decisions.",
+            "Main Output": "Experiment backlog and decision log.",
+        },
+    ])
+    show_table(
+        journey,
+        "Dashboard information architecture.",
+        "This is the intended reading path: orient -> inspect evidence -> synthesize -> choose strategy -> test -> learn.",
+        full_text=True,
+    )
+
+
 def render_insight_chain(label, signal, interpretation, takeaway, test):
     st.markdown(
         f"""
@@ -1050,6 +1238,67 @@ def render_staged_gtm_strategy():
         "Synthesized GTM model from brand context, consumer signals, competitor landscape, and cafe bridge analysis.",
         "This keeps ecommerce as a later scale path until the value proposition has stronger prelaunch signal.",
         full_text=True,
+    )
+
+
+def render_ranked_bar_chart(df, x_col, y_col, tooltip_cols, title=None, color="#A0442D", height=340):
+    if df.empty or x_col not in df.columns or y_col not in df.columns:
+        return
+    chart_df = df.dropna(subset=[x_col, y_col]).copy()
+    if chart_df.empty:
+        return
+    chart_df[x_col] = pd.to_numeric(chart_df[x_col], errors="coerce")
+    chart_df = chart_df.dropna(subset=[x_col])
+    if chart_df.empty:
+        return
+    tooltip = [alt.Tooltip(f"{col}:Q" if pd.api.types.is_numeric_dtype(chart_df[col]) else f"{col}:N") for col in tooltip_cols if col in chart_df.columns]
+    chart = alt.Chart(chart_df).mark_bar(color=color, opacity=0.86).encode(
+        x=alt.X(f"{x_col}:Q", title=title or x_col),
+        y=alt.Y(f"{y_col}:N", sort="-x", title=None),
+        tooltip=tooltip,
+    ).properties(height=height)
+    st.altair_chart(chart, width="stretch")
+
+
+def render_consumer_desire_chart(signal_summary):
+    if not signal_summary:
+        return
+    scores = signal_summary["scores"].reset_index()
+    scores.columns = ["Desire Vector", "Score"]
+    scores = scores.dropna(subset=["Score"])
+    if scores.empty:
+        return
+    scores["Desire Vector"] = scores["Desire Vector"].str.replace("_", " ").str.title()
+    chart = alt.Chart(scores).mark_bar(color="#2B4533", opacity=0.86).encode(
+        x=alt.X("Score:Q", scale=alt.Scale(domain=[0, 10]), title="Average Score"),
+        y=alt.Y("Desire Vector:N", sort="-x", title=None),
+        tooltip=[alt.Tooltip("Desire Vector:N"), alt.Tooltip("Score:Q", format=".1f")],
+    ).properties(height=190)
+    st.altair_chart(chart, width="stretch")
+
+
+def render_launch_market_chart(launch_market_df):
+    if launch_market_df.empty:
+        return
+    chart_cols = ["geography", "launch_score", "median_household_income", "population"]
+    if "asian_population_pct" in launch_market_df.columns:
+        chart_cols.append("asian_population_pct")
+    chart_df = launch_market_df.head(12)[chart_cols].copy()
+    chart_df["Market"] = chart_df["geography"].str.replace(" Metro Area", "", regex=False).str.replace(" Micro Area", "", regex=False)
+    chart_df = chart_df.rename(columns={
+        "launch_score": "Launch Score",
+        "median_household_income": "Median Income",
+        "population": "Population",
+        "asian_population_pct": "Asian Pop %",
+    })
+    render_ranked_bar_chart(
+        chart_df,
+        "Launch Score",
+        "Market",
+        ["Market", "Launch Score", "Median Income", "Population", "Asian Pop %"],
+        title="Launch Score",
+        color="#2B4533",
+        height=360,
     )
 
 
@@ -1205,26 +1454,32 @@ def build_launch_hypotheses(signal_summary, comp_summary):
     return pd.DataFrame(hypotheses)
 
 
-def generate_value_props(top_records):
+def generate_value_props(evidence_sections):
     client = genai.Client(api_key=GEMINI_API_KEY)
-    evidence_blocks = []
-    for idx, (_, row) in enumerate(top_records.iterrows(), start=1):
-        evidence_blocks.append(
-            f"Source ID: S{idx}\nSource: {row['source_type']}\nSummary: {row['summary']}\nText: {row['source_text']}"
-        )
-    text_data = "\n\n".join(evidence_blocks)
+    text_data = format_evidence_packet(evidence_sections)
     prompt = """
 You are a lead growth marketer for 'Southern Frontier', a Pu'er tea brand. 
-Southern Frontier combines modern, transparent design philosophy (like Blue Bottle) with the resilient, authentic spirit of ancient mountain Pu'er (values: Pure, Power, Pleasure).
-Review the provided consumer friction and intent data from specialty coffee and matcha drinkers. 
-Based strictly on the pain points and aesthetic desires mentioned, generate 3 distinct pieces of marketing copy for upcoming A/B tests. 
+Southern Frontier combines modern, transparent design philosophy with the resilient, authentic spirit of ancient mountain Pu'er (values: Pure, Power, Pleasure).
+
+Review the provided cross-dashboard evidence packet. It may include:
+- Brand and GTM context
+- Google Trends / macro category signals
+- YouTube and Google PAA consumer-language signals
+- Ecommerce competitor pricing and positioning gaps
+- Cafe/retail benchmark cues
+- Launch-market prioritization
+- Audience/message opportunity scores
+
+Generate 3 distinct value proposition directions for upcoming A/B tests.
+Each direction should be grounded in the evidence packet, not only consumer snippets.
+Avoid generic wellness claims. Preserve cultural credibility while making Pu'er approachable to US consumers.
 
 For each, provide: 
-- The Angle (e.g., 'Hero Headline', 'Instagram Ad Hook', 'Product Description')
+- The Angle (e.g., 'Website Hero', 'Paid Social Hook', 'Pop-up Tasting Invite', 'Cafe Menu Message')
 - H1 Headline (Max 6 words)
 - H2 Sub-headline (Max 12 words)
-- The Data Rationale (1 sentence explaining why this will convert, citing the provided data).
-- evidence_refs: 1-3 Source IDs such as ["S1", "S4"] that support the rationale.
+- The Data Rationale (1 sentence explaining why this is worth testing, citing the provided evidence).
+- evidence_refs: 2-4 Source IDs such as ["M1", "M3", "C2", "G1"] that support the rationale.
 
 Return clean JSON that conforms to the schema.
 """
@@ -1247,7 +1502,7 @@ render_page_header()
 render_brand_intro()
 render_website_links(["Brand Story", "Discover Pu'er", "Products", "Flagship Store", "Partnership"])
 render_callout(
-    "This dashboard reads early demand, competitor, consumer-language, and cafe-experience signals to guide Southern Frontier's US branding and GTM choices. The website should serve as a brand trust, education, and lead-capture hub now; a limited physical experience can create trust, content, and learning; ecommerce can remain a later roadmap layer once prelaunch signals are clearer."
+    "This dashboard connects market-entry questions to macro signals, competitor intelligence, brand positioning, GTM choices, and experiments. Read left to right to move from uncertainty to testable strategy."
 )
 
 try:
@@ -1276,330 +1531,369 @@ launch_market_df = build_launch_market_table(demo_df)
 indexed_trends_df = build_indexed_trends(trends_df)
 puer_composite_df = build_puer_composite(trends_df)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+
+tab_questions, tab_macro, tab_competitors, tab_positioning, tab_gtm, tab_learning_loop = st.tabs([
     "Market Questions",
-    "Strategic Insights",
+    "Macro Signals",
+    "Competitor Intelligence",
+    "Brand Positioning",
     "GTM Strategy",
-    "Evidence Explorer",
-    "Message Tests",
     "Learning Loop",
 ])
 
-with tab1:
+with tab_questions:
     st.header("Market-Entry Question Framework")
     render_story_card(
         "How to read this dashboard",
-        "Start with the business questions, then work backward into signals, insights, strategy, and experiments.",
-        "This dashboard is a market-entry intelligence tool, not a demand forecast or sales model. Its job is to make uncertainty easier to act on before Southern Frontier commits major capital.",
-        "The strongest evidence should lead to lightweight experiments: waitlist pages, partner outreach, tasting RSVPs, creator briefs, cafe collaborations, and eventually commerce tests."
+        "Start with the business questions, then follow the evidence domains that inform the US launch strategy.",
+        "The dashboard separates market signals, competitor intelligence, brand-positioning synthesis, GTM planning, and experiments so each tab has one job.",
+        "Read left to right: orient -> read macro signals -> study competitors -> synthesize positioning -> plan GTM -> run experiments."
     )
     render_question_framework()
 
     st.header("Signal Map")
     render_story_card(
         "From data source to decision",
-        "Each signal exists because it helps answer a market-entry question.",
-        "The dashboard intentionally separates evidence from interpretation. Google Trends, public search snippets, Shopify feeds, Census data, and LLM scoring each answer different types of questions.",
-        "This lets the article show a clean chain: question -> signal -> synthesized insight -> GTM implication -> test."
+        "Each signal exists because it informs a specific market-entry decision.",
+        "Google Trends and YouTube/PAA language are macro market signals for brand positioning. Competitor data informs pricing, menu, design, and experience choices. Census data belongs with GTM because it informs where physical tests may happen.",
+        "This keeps evidence and decisions connected without repeating the same insight across multiple tabs."
     )
     render_signal_map()
 
-    st.header("Executive Readout")
-    st.subheader("One-Page Case Study Summary")
-    render_portfolio_brief()
-    if signal_summary:
-        cols = st.columns(4)
-        cols[0].metric("Top Consumer Vector", signal_summary["top_signal"].title())
-        cols[1].metric("Top Vector Score", f"{signal_summary['top_score']:.1f}/10", classify_score(signal_summary["top_score"]))
-        cols[2].metric("High-Alignment Mentions", signal_summary["aligned_count"])
-        if comp_summary:
-            cols[3].metric("Competitor Products", comp_summary["products"])
-        else:
-            cols[3].metric("Competitor Products", "No data")
-
-        render_story_card(
-            "Strategic interpretation",
-            f"The strongest early wedge is {signal_summary['top_signal']}.",
-            "The current evidence suggests Southern Frontier should not introduce pu'er as a niche connoisseur category first. The stronger move is to translate the brand's Pure, Power, Pleasure story into an existing consumer behavior: premium ritual, cleaner energy, transparent sourcing, or modern beverage discovery.",
-            "A US launch has to lower the education burden. The dashboard should therefore measure not only whether people like tea, but which part of the brand story gives new customers a reason to care now."
-        )
-    else:
-        st.info("No scored consumer data is available yet.")
-
-    if not adjacent_trend_summary.empty:
-        leader = adjacent_trend_summary.iloc[0]
-        render_story_card(
-            "Adjacent demand context",
-            f"'{leader['keyword']}' is the strongest trend mover in the shared benchmark set.",
-            "Use this table to compare adjacent beverage and ritual behaviors collected in the same Google Trends payload. Pu'er variants are intentionally excluded here because they use a separate scale and answer a different question: spelling awareness and education burden.",
-            f"The latest shared-payload pull shows '{leader['keyword']}' with the highest positive change among comparable benchmark terms."
-        )
-        show_table(
-            adjacent_trend_summary.rename(columns={
-                "keyword": "Keyword",
-                "first_interest": "First Interest",
-                "latest_interest": "Latest Interest",
-                "delta": "Change",
-                "average_interest": "Average Interest",
-            }),
-            "Google Trends via pytrends, stored in google_trends_data.",
-            "First-tab table is restricted to comparable adjacent keywords collected in one benchmark payload: matcha, specialty coffee, puer (benchmark), boba tea, and kombucha. Pu'er variants are shown only in Evidence Explorer.",
-        )
-    else:
-        render_story_card(
-            "Adjacent demand context",
-            "Comparable benchmark trend data has not been collected yet.",
-            "Once the quantitative pipeline runs, this section should compare familiar adjacent behaviors such as matcha, specialty coffee, puer (benchmark), boba tea, and kombucha.",
-            "Pu'er trend variants belong in the Evidence Explorer because they use a separate Google Trends scale and are best read as awareness and spelling-friction signals."
-        )
-
-    if comp_summary:
-        position_label = classify_score(comp_summary["avg_positioning"])
-        render_story_card(
-            "Competitive landscape",
-            f"The current competitor set averages {comp_summary['avg_positioning_label']} on modern authenticity.",
-            "This is where brand whitespace can become concrete. If competitors are either highly traditional or too plain, Southern Frontier can own the middle: culturally rooted, visually clean, and easy to understand.",
-            f"The database currently includes {comp_summary['products']} products across {comp_summary['vendors']} vendors, with a median listed price of {comp_summary['median_price_label']}."
-        )
-        cols = st.columns(3)
-        cols[0].metric("Median Competitor Price", comp_summary["median_price_label"])
-        cols[1].metric("Avg Positioning Score", comp_summary["avg_positioning_label"], position_label)
-        cols[2].metric("Whitespace Candidates", comp_summary["weak_count"])
-    else:
-        render_story_card(
-            "Competitive landscape",
-            "Competitor data has not been collected yet.",
-            "This section should eventually answer where Southern Frontier can be meaningfully different: format, price, education, visual identity, sourcing proof, or daily-use convenience.",
-            "Competitor analysis becomes most valuable when it is translated into a positioning map and concrete launch hypotheses."
-        )
-
-    st.header("Initial Launch Hypotheses")
-    render_callout(
-        "Use these as the bridge from analytics to action. Each hypothesis should become a scrappy test: a landing page, ad angle, creator brief, waitlist survey, or product bundle."
-    )
+    st.header("Dashboard Journey")
+    journey = pd.DataFrame([
+        {"Tab": "1. Market Questions", "Purpose": "Frame what the dashboard must answer.", "Decisions Supported": "What evidence do we need before entering the US market?"},
+        {"Tab": "2. Macro Signals", "Purpose": "Read category awareness and consumer language.", "Decisions Supported": "Which market narratives and consumer frictions should inform brand positioning?"},
+        {"Tab": "3. Competitor Intelligence", "Purpose": "Compare ecommerce vendors and cafe/retail benchmarks.", "Decisions Supported": "How should Southern Frontier think about pricing, assortment, menu, design, and experience cues?"},
+        {"Tab": "4. Brand Positioning", "Purpose": "Synthesize macro and competitor evidence into positioning options.", "Decisions Supported": "What promise, audience, and message angles should be tested first?"},
+        {"Tab": "5. GTM Strategy", "Purpose": "Translate positioning into staged launch choices.", "Decisions Supported": "Website, physical proof lab, ecommerce roadmap, and metro prioritization."},
+        {"Tab": "6. Learning Loop", "Purpose": "Turn strategy into experiments and decisions.", "Decisions Supported": "What did we test, what happened, and what changed?"},
+    ])
     show_table(
-        build_launch_hypotheses(signal_summary, comp_summary),
-        "Derived from scored consumer snippets, Shopify competitor data, and Southern Frontier website brand proof points.",
-        "Hypotheses are analyst heuristics for experiment planning, not validated causal findings yet.",
+        journey,
+        "Dashboard information architecture.",
+        "Each tab owns one decision domain to avoid duplicate evidence and conclusions.",
+        full_text=True,
     )
 
-with tab2:
-    st.header("Strategic Insights")
+with tab_macro:
+    st.header("Macro Signals")
     render_story_card(
-        "Dashboard narrative",
-        "The article needs four takeaways, so the dashboard now leads with four matching insight chains.",
-        "Each insight is presented as signal, interpretation, strategic takeaway, and recommended test. The deeper charts and raw tables still live in Evidence Explorer.",
-        "This keeps the dashboard readable for business readers while preserving auditability for data readers."
+        "Market and consumer context",
+        "Google search trends and YouTube/PAA language are macro signals, not tactical GTM outputs by themselves.",
+        "Together, they show whether Pu'er has category awareness, which adjacent beverage behaviors matter, and what language or friction should shape brand positioning.",
+        "Use this tab to understand the market narrative before evaluating competitors or GTM channels."
     )
-    render_strategic_insight_overview(signal_summary, comp_summary, launch_market_df)
 
-    st.header("Audience Segments and Opportunity Whitespace")
+    st.subheader("Google Trends: Category Awareness and Adjacent Demand")
     render_story_card(
-        "MVP segment model",
-        "The dashboard now turns raw snippets into actionable launch audiences.",
-        "The segmentation is intentionally simple and explainable for the case study: it uses consumer language and score patterns to classify each mention into a likely GTM segment.",
-        "This gives you a bridge from qualitative mining to decisions about product format, channel, offer, and message tests."
+        "How to read this",
+        "Google Trends scales are normalized within each query payload, so cross-chart 80s are not equal.",
+        "Adjacent beverage terms and Pu'er spelling variants answer different questions. Adjacent terms show familiar demand pools; Pu'er variants show awareness and spelling fragmentation.",
+        "For brand positioning, the practical question is whether Southern Frontier should lead with Pu'er directly or enter through adjacent behaviors such as matcha, coffee alternatives, gut health, and daily ritual."
     )
-
-    if not segment_df.empty:
-        top_segment = segment_df.iloc[0]
-        cols = st.columns(4)
-        cols[0].metric("Top Segment", top_segment["segment"])
-        cols[1].metric("Segment Mentions", int(top_segment["mentions"]))
-        cols[2].metric("Avg Alignment", f"{top_segment['avg_alignment']:.1f}/10")
-        cols[3].metric("Opportunity Score", f"{top_segment['opportunity_score']:.1f}")
-
-        display_segments = segment_df.rename(columns={
-            "segment": "Segment",
-            "mentions": "Mentions",
-            "avg_transparency": "Transparency",
-            "avg_ritual": "Ritual",
-            "avg_energy": "Energy",
-            "avg_alignment": "Alignment",
-            "opportunity_score": "Opportunity Score",
-        })
-        show_table(
-            display_segments,
-            "friction_data table populated by Google People Also Ask and YouTube transcript collection, scored by Gemini.",
-            "Segments are classified by Gemini. Opportunity Score (0-100) = alignment (40%) + volume rank (30%).",
-        )
-        st.download_button(
-            "Download Segments CSV",
-            display_segments.to_csv(index=False).encode("utf-8"),
-            "sf_segments.csv",
-            "text/csv",
-        )
-
-        st.subheader("Opportunity Map")
-        render_story_card(
-            "How to use this",
-            "Prioritize opportunities that are easy to explain, strongly aligned with the brand, and testable with a low-cost launch asset.",
-            "The score combines segment strength, current evidence volume, trend context, and competitor whitespace. It is a prioritization heuristic, not a truth machine.",
-            "Good case-study dashboards make assumptions visible. This one shows the recommended test next to each opportunity so strategy can be validated."
-        )
-        render_callout(
-            "Score formula (0-100): Alignment contribution (0-40) + Volume contribution (0-30) + Trend boost (0-15) + Competitor gap boost (0-15). Each component is shown in the table for transparency."
-        )
-        show_table(
-            opportunity_df,
-            "Derived from segment table, Google Trends directional change, and competitor whitespace count.",
-            "Score = alignment (40%) + volume rank (30%) + trend boost (15%) + competitor gap (15%). Use as prioritization, then validate with experiments.",
-        )
-        st.download_button(
-            "Download Opportunities CSV",
-            opportunity_df.to_csv(index=False).encode("utf-8"),
-            "sf_opportunities.csv",
-            "text/csv",
-        )
-    else:
-        st.info("No segment table is available yet.")
-
-    if not comp_df.empty and {"price_usd", "positioning_score", "vendor"}.issubset(comp_df.columns):
-        st.subheader("Vendor-Level Competitor Positioning")
-        render_story_card(
-            "Whitespace lens",
-            "For brand positioning, the vendor-level view is more useful than one dot per product.",
-            "The map aggregates each vendor's average product price and average Modern Authenticity score. This better approximates brand-level positioning while still using product-copy evidence.",
-        )
-        plot_df = comp_df.groupby("vendor").agg(
-            avg_price_usd=("price_usd", "mean"),
-            avg_positioning_score=("positioning_score", "mean"),
-            products=("vendor", "size"),
-        ).reset_index().rename(columns={
-            "vendor": "Vendor",
-            "avg_price_usd": "Avg Price USD",
-            "avg_positioning_score": "Avg Modern Authenticity",
-            "products": "Products",
-        })
+    if not trends_df.empty:
+        trend_keywords = sorted(trends_df["keyword"].dropna().unique())
         render_source_note(
-            "Shopify /products.json endpoints and Gemini scoring stored in competitor_products.",
-            "Each point is a vendor aggregate: average observed price and average product-copy positioning score."
-        )
-        base_chart = alt.Chart(plot_df).encode(
-            x=alt.X("Avg Price USD:Q", title="Average Observed Product Price, USD"),
-            y=alt.Y("Avg Modern Authenticity:Q", title="Average Modern Authenticity Score", scale=alt.Scale(domain=[0, 10])),
-            tooltip=[
-                alt.Tooltip("Vendor:N"),
-                alt.Tooltip("Avg Price USD:Q", format="$.2f"),
-                alt.Tooltip("Avg Modern Authenticity:Q", format=".1f"),
-                alt.Tooltip("Products:Q"),
-            ],
-        )
-        points = base_chart.mark_circle(color="#A0442D", opacity=0.78).encode(
-            size=alt.Size("Products:Q", title="Observed Products", scale=alt.Scale(range=[80, 700])),
-        )
-        labels = base_chart.mark_text(
-            align="left",
-            baseline="middle",
-            dx=8,
-            fontSize=11,
-            color="#1A1A1A",
-        ).encode(text="Vendor:N")
-        st.altair_chart((points + labels).properties(height=420), width="stretch")
-        show_table(
-            plot_df.sort_values("Avg Modern Authenticity", ascending=False),
-            "competitor_products table from Shopify feeds, scored by Gemini.",
-            "Vendor positioning score = average positioning_score across observed products for that vendor. This is a proxy until brand-level visual/site analysis is added.",
-        )
-        st.download_button(
-            "Download Vendor Positioning CSV",
-            plot_df.to_csv(index=False).encode("utf-8"),
-            "sf_vendor_positioning.csv",
-            "text/csv",
+            "Google Trends via pytrends, stored in google_trends_data.",
+            f"Current stored keywords: {', '.join(trend_keywords)}."
         )
 
-    st.subheader("US Launch-Market Prioritization")
+        trends_for_chart = trends_df.copy()
+        trends_for_chart["interest"] = pd.to_numeric(trends_for_chart["interest"], errors="coerce")
+        trends_for_chart = trends_for_chart.dropna(subset=["date", "interest", "keyword"])
+        trends_for_chart["family"] = trends_for_chart["keyword"].apply(trend_family)
+        benchmark_df = trends_for_chart[trends_for_chart["family"] == "Adjacent benchmark"]
+        puer_df = trends_for_chart[trends_for_chart["family"] == "Pu'er variants"]
+
+        if not benchmark_df.empty:
+            st.markdown("**Adjacent Benchmark Terms**")
+            max_date = benchmark_df['date'].max()
+            label_df = benchmark_df[benchmark_df['date'] == max_date]
+            bench_chart = alt.Chart(benchmark_df).mark_line(strokeWidth=2).encode(
+                x=alt.X("date:T", title="Date"),
+                y=alt.Y("interest:Q", title="Search Interest"),
+                color=alt.Color("keyword:N", title="Keyword", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"])),
+                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("interest:Q")],
+            )
+            labels = alt.Chart(label_df).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
+                x=alt.X("date:T"),
+                y=alt.Y("interest:Q"),
+                text="keyword:N",
+                color=alt.Color("keyword:N", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"]))
+            )
+            st.altair_chart((bench_chart + labels).properties(height=320), width="stretch")
+
+        if not puer_df.empty:
+            strongest_spelling = puer_df.groupby('keyword')['interest'].mean().idxmax()
+            st.markdown(f"**Pu'er Spelling Variants** (Strongest: `{strongest_spelling}`)")
+            max_date_puer = puer_df['date'].max()
+            label_df_puer = puer_df[puer_df['date'] == max_date_puer]
+            puer_chart = alt.Chart(puer_df).mark_line(strokeWidth=2).encode(
+                x=alt.X("date:T", title="Date"),
+                y=alt.Y("interest:Q", title="Search Interest"),
+                color=alt.Color("keyword:N", title="Spelling", scale=alt.Scale(range=["#2B4533", "#A0442D", "#D9BD7E", "#6E6258", "#8B5E3C"])),
+                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("interest:Q")],
+            )
+            labels_puer = alt.Chart(label_df_puer).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
+                x=alt.X("date:T"),
+                y=alt.Y("interest:Q"),
+                text="keyword:N",
+                color=alt.Color("keyword:N", scale=alt.Scale(range=["#2B4533", "#A0442D", "#D9BD7E", "#6E6258", "#8B5E3C"]))
+            )
+            st.altair_chart((puer_chart + labels_puer).properties(height=320), width="stretch")
+
+        if not puer_composite_df.empty:
+            st.markdown("**Pu'er Composite Demand Signal**")
+            comp_melt = puer_composite_df.melt(id_vars=["date"], var_name="metric", value_name="interest")
+            max_date_comp = comp_melt['date'].max()
+            label_df_comp = comp_melt[comp_melt['date'] == max_date_comp]
+            comp_chart = alt.Chart(comp_melt).mark_line(strokeWidth=2).encode(
+                x=alt.X("date:T", title="Date"),
+                y=alt.Y("interest:Q", title="Interest"),
+                color=alt.Color("metric:N", title="Metric", scale=alt.Scale(range=["#A0442D", "#2B4533"])),
+                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("metric:N"), alt.Tooltip("interest:Q")],
+            )
+            labels_comp = alt.Chart(label_df_comp).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
+                x=alt.X("date:T"),
+                y=alt.Y("interest:Q"),
+                text="metric:N",
+                color=alt.Color("metric:N", scale=alt.Scale(range=["#A0442D", "#2B4533"]))
+            )
+            st.altair_chart((comp_chart + labels_comp).properties(height=320), width="stretch")
+
+        clean_indexed_trends_df = indexed_trends_df.dropna(subset=["date", "indexed_interest", "keyword"]) if not indexed_trends_df.empty else pd.DataFrame()
+        if not clean_indexed_trends_df.empty:
+            st.markdown("**Indexed Growth View, First Non-Zero Week = 100**")
+            render_source_note(
+                "Derived from google_trends_data.",
+                "This view compares growth direction rather than absolute volume. It is safer for comparing terms collected in different Google Trends payloads."
+            )
+            max_date_idx = clean_indexed_trends_df['date'].max()
+            label_df_idx = clean_indexed_trends_df[clean_indexed_trends_df['date'] == max_date_idx]
+            idx_chart = alt.Chart(clean_indexed_trends_df).mark_line(strokeWidth=2).encode(
+                x=alt.X("date:T", title="Date"),
+                y=alt.Y("indexed_interest:Q", title="Indexed Interest (baseline = 100)"),
+                color=alt.Color("keyword:N", title="Keyword", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"])),
+                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("indexed_interest:Q", format=".1f")],
+            )
+            labels_idx = alt.Chart(label_df_idx).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
+                x=alt.X("date:T"),
+                y=alt.Y("indexed_interest:Q"),
+                text="keyword:N",
+                color=alt.Color("keyword:N", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"]))
+            )
+            st.altair_chart((idx_chart + labels_idx).properties(height=320), width="stretch")
+    else:
+        st.info("No Google Trends data available yet.")
+
+    st.header("YouTube and Search-Language Insights")
     render_story_card(
-        "Census-powered GTM lens",
-        "The dashboard now ranks US metro areas for premium launch potential.",
-        "This uses Census ACS population, household income, and higher-education proxy signals. It should guide where to test partnerships, creator seeding, cafe collaborations, events, and paid geo-targeting first.",
-        "For Southern Frontier, the ideal early market likely has premium beverage behavior, high disposable income, educated consumers, and enough density to learn quickly."
+        "Consumer language as macro signal",
+        "YouTube transcripts and People Also Ask snippets reveal how consumers talk about adjacent rituals, energy, purity, brewing, and intimidation.",
+        "These are not final customer segments; they are market-language signals that help decide what Southern Frontier should explain, emphasize, or avoid in brand positioning.",
+        "Use these charts to translate messy qualitative language into positioning hypotheses."
     )
-    if not launch_market_df.empty:
-        top_market = launch_market_df.iloc[0]
-        cols = st.columns(4)
-        cols[0].metric("Top Launch Market", top_market["geography"].replace(" Metro Area", "").replace(" Micro Area", ""))
-        cols[1].metric("Launch Score", f"{top_market['launch_score']:.1f}")
-        cols[2].metric("Median Income", f"${top_market['median_household_income']:,.0f}")
-        cols[3].metric("Population", f"{top_market['population']:,.0f}")
-
-        has_asian = "asian_population_pct" in launch_market_df.columns
-        display_cols = [
-            "geography",
-            "launch_score",
-            "Strategic read",
-            "population",
-            "median_household_income",
-            "education_proxy",
-        ]
-        rename_map = {
-            "geography": "Market",
-            "launch_score": "Launch Score",
-            "population": "Population",
-            "median_household_income": "Median Household Income",
-            "education_proxy": "Education Proxy",
-        }
-        if has_asian:
-            display_cols.insert(3, "asian_population_pct")
-            rename_map["asian_population_pct"] = "Asian Pop %"
-        market_display = launch_market_df.head(25)[
-            [c for c in display_cols if c in launch_market_df.columns]
-        ].rename(columns=rename_map)
-
-        formula_text = (
-            "Launch Score = income (30%) + education (30%) + population (25%) + Asian pop % (15%)."
-            if has_asian
-            else "Launch Score = income (35%) + education (35%) + population (30%). Run census_pipeline.py to add Asian diaspora data."
+    if signal_summary:
+        score_text = " ".join([
+            f"<span class='evidence-pill'>{escape(label.replace('_', ' ').title())}: {score:.1f}/10</span>"
+            for label, score in signal_summary["scores"].items()
+        ])
+        st.markdown(score_text, unsafe_allow_html=True)
+        st.subheader("Consumer Desire Scorecard")
+        render_consumer_desire_chart(signal_summary)
+        render_story_card(
+            "What the language is saying",
+            f"The leading macro language vector is {signal_summary['top_signal']}.",
+            "The brand should choose one primary promise for the first launch campaign, then use the other vectors as supporting proof.",
+            "A focused brand wedge is easier to test than a broad claim that tries to be heritage, wellness, luxury, taste, ritual, and energy all at once."
         )
+
+    st.subheader("Brand Alignment Over Time")
+    if 'source_url' not in df.columns:
+        df['source_url'] = None
+    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
+    chart_data = df.groupby('timestamp')['premium_accessibility_score'].mean().reset_index()
+    chart_data.columns = ["Date", "Avg Brand Alignment"]
+    chart_data = chart_data.dropna(subset=["Date", "Avg Brand Alignment"])
+    if not chart_data.empty:
+        render_source_note(
+            "friction_data table.",
+            "premium_accessibility_score = average of transparency_desire, brewing_theater, and grounded_energy_desire from Gemini-scored PAA/transcript snippets."
+        )
+        alignment_chart = alt.Chart(chart_data).mark_line(strokeWidth=2.5, color="#2B4533").encode(
+            x=alt.X("Date:T", title="Date"),
+            y=alt.Y("Avg Brand Alignment:Q", title="Avg Brand Alignment Score", scale=alt.Scale(domain=[0, 10])),
+            tooltip=[alt.Tooltip("Date:T"), alt.Tooltip("Avg Brand Alignment:Q", format=".1f")],
+        ).properties(height=300)
+        st.altair_chart(alignment_chart, width="stretch")
+    else:
+        st.info("No time-series alignment data available yet.")
+
+    st.subheader("High-Signal Language Evidence")
+    render_story_card(
+        "Why these excerpts matter",
+        "These are the snippets most likely to contain usable customer language.",
+        "When writing ads, packaging, creator briefs, or landing pages, this table should be mined for phrases that make the customer feel recognized.",
+        "The current filter shows records with strong grounded-energy or transparency scores."
+    )
+    high_theater_df = df[(df['transparency_desire'] >= 8) | (df['grounded_energy_desire'] >= 8)].copy()
+    if not high_theater_df.empty:
+        cols_to_show = ['source_type', 'transparency_desire', 'grounded_energy_desire', 'summary', 'source_text', 'source_url']
         show_table(
-            market_display,
-            "US Census ACS 2024 acs1 API, stored in metro_demographics.",
-            formula_text,
-        )
-        st.download_button(
-            "Download Launch Markets CSV",
-            market_display.to_csv(index=False).encode("utf-8"),
-            "sf_launch_markets.csv",
-            "text/csv",
+            high_theater_df[cols_to_show],
+            "friction_data table from Google PAA and YouTube transcripts, scored by Gemini.",
+            "Rows shown have transparency_desire >= 8 or grounded_energy_desire >= 8.",
+            full_text=True,
+            column_config={
+                "source_url": st.column_config.LinkColumn("Source Link"),
+                "source_type": st.column_config.TextColumn("Source", width="small")
+            }
         )
     else:
-        st.info("No Census metro demographics found yet. Run census_pipeline.py after adding CENSUS_API_KEY.")
+        st.info("No highly aligned consumer records found yet.")
 
-with tab3:
-    st.header("GTM Strategy")
+with tab_competitors:
+    st.header("Competitor Intelligence")
     render_story_card(
-        "From insight to market entry",
-        "The recommended strategy is staged: website first, one physical proof lab second, ecommerce later.",
-        "This sequence fits the insight pattern. Pu'er needs education, trust, sensory proof, and smaller tests before it needs a large retail or ecommerce commitment.",
-        "The dashboard should make this strategic implication obvious before users dive into cafe benchmarks or raw evidence."
-    )
-    render_staged_gtm_strategy()
-
-    st.header("Cafe & Retail Experience Intelligence")
-    render_story_card(
-        "Brand DNA",
-        "Southern Frontier is not only a tea product brand; it is a hospitality and ritual brand.",
-        "The Hangzhou flagship sits in a tourist area, so slowing down is part of the atmosphere. But the brand should also support fast-paced modern life through to-go Pu'er lattes and convenient drinks, just as coffee shops serve both quick to-go orders and slower pour-over rituals.",
-        "This does not mean a costly multi-store rollout. It means one flagship, pop-up, or partner experience can become a learning lab, content engine, and lead-capture bridge while ecommerce remains a future roadmap layer."
-    )
-    render_website_links(["Flagship Store", "Products", "Brand Story"])
-    render_source_note(
-        "Southern_Frontier_Website StoreSection and store photo/video assets.",
-        "Flagship cues used here: Grand Canal location, Pu'er latte, pure tea, tasting, quiet-by-design space, conversation-led hospitality, and to-go drinks for fast-paced use cases."
+        "Two competitor lenses",
+        "Competitor intelligence deserves its own tab because it informs concrete execution choices.",
+        "Ecommerce vendors inform product architecture, pricing, proof language, merchandising, and future online conversion. Cafe and retail competitors inform menu, drink format, ritual theater, service design, visual language, and cafe-to-product bridge.",
+        "Use this tab to decide what Southern Frontier should borrow, avoid, price against, and visually differentiate from."
     )
 
-    cols = st.columns(4)
-    cols[0].metric("Experience Wedge", "To-go + ritual")
-    cols[1].metric("Bridge Drink", "Pu'er latte")
-    cols[2].metric("Trust Cue", "Visible proof")
-    cols[3].metric("Home Bridge", "Sampler / bundle")
-
-    st.subheader("Cafe / Retail Competitor Positioning")
+    st.header("Ecommerce Vendor Intelligence")
     render_story_card(
-        "How to use this",
-        "Track these competitors for menu strategy, ritual theater, visual language, beverage pricing, and cafe-to-home conversion.",
-        "The cafe score mirrors the tea-vendor positioning concept, but it focuses on retail experience: visual positioning, ritual theater, fast-to-go plus slow-ritual duality, and cafe-to-product bridge.",
-        "This is not about copying their store footprint. It is about learning which experience cues make an unfamiliar tea desirable enough to join a list, attend a tasting, start a partnership conversation, or later buy online."
+        "What this informs",
+        "Ecommerce vendor data helps benchmark pricing, product formats, and how well vendors balance cultural credibility with modern accessibility.",
+        "This matters even before Southern Frontier launches ecommerce because the website still needs education, proof, and future product architecture.",
+        "The goal is to find pricing permission and positioning whitespace, not to copy existing tea shops."
+    )
+    if not comp_df.empty:
+        if {"price_usd", "positioning_score", "vendor"}.issubset(comp_df.columns):
+            st.subheader("Modern Authenticity by Vendor")
+            render_story_card(
+                "Whitespace lens",
+                "This bubble chart compares vendors by average observed product price and average Modern Authenticity score.",
+                "For brand positioning, the vendor-level view is more useful than one dot per product because customers experience the vendor as one brand world.",
+                "Look for brands that are high-priced but low-accessibility, or modern-looking but weak on cultural credibility. Those gaps inform Southern Frontier's positioning."
+            )
+            bubble_source_df = comp_df.copy()
+            bubble_source_df["price_usd"] = pd.to_numeric(bubble_source_df["price_usd"], errors="coerce")
+            bubble_source_df["positioning_score"] = pd.to_numeric(bubble_source_df["positioning_score"], errors="coerce")
+            bubble_source_df = bubble_source_df.dropna(subset=["vendor", "price_usd", "positioning_score"])
+            if not bubble_source_df.empty:
+                plot_df = bubble_source_df.groupby("vendor").agg(
+                    avg_price_usd=("price_usd", "mean"),
+                    avg_positioning_score=("positioning_score", "mean"),
+                    products=("vendor", "size"),
+                ).reset_index().rename(columns={
+                    "vendor": "Vendor",
+                    "avg_price_usd": "Avg Price USD",
+                    "avg_positioning_score": "Avg Modern Authenticity",
+                    "products": "Observed Products",
+                })
+                base_chart = alt.Chart(plot_df).encode(
+                    x=alt.X("Avg Price USD:Q", title="Average Observed Product Price, USD"),
+                    y=alt.Y("Avg Modern Authenticity:Q", title="Average Modern Authenticity Score", scale=alt.Scale(domain=[0, 10])),
+                    tooltip=[
+                        alt.Tooltip("Vendor:N"),
+                        alt.Tooltip("Avg Price USD:Q", format="$.2f"),
+                        alt.Tooltip("Avg Modern Authenticity:Q", format=".1f"),
+                        alt.Tooltip("Observed Products:Q"),
+                    ],
+                )
+                points = base_chart.mark_circle(color="#A0442D", opacity=0.78).encode(
+                    size=alt.Size("Observed Products:Q", title="Observed Products", scale=alt.Scale(range=[80, 700])),
+                )
+                labels = base_chart.mark_text(
+                    align="left",
+                    baseline="middle",
+                    dx=8,
+                    fontSize=11,
+                    color="#1A1A1A",
+                ).encode(text="Vendor:N")
+                st.altair_chart((points + labels).properties(height=420), width="stretch")
+                show_table(
+                    plot_df.sort_values("Avg Modern Authenticity", ascending=False),
+                    "competitor_products table from Shopify feeds, scored by Gemini.",
+                    "Vendor positioning score = average positioning_score across observed products for that vendor. This is a proxy until brand-level visual/site analysis is added.",
+                )
+            else:
+                st.info("No valid vendor price and positioning rows are available for this chart.")
+
+        if {"vendor", "product_type", "price_usd"}.issubset(comp_df.columns):
+            st.subheader("Average Price by Vendor")
+            price_source_df = comp_df.copy()
+            price_source_df["price_usd"] = pd.to_numeric(price_source_df["price_usd"], errors="coerce")
+            price_source_df = price_source_df.dropna(subset=["vendor", "price_usd"])
+            price_df = price_source_df.groupby(['vendor', 'product_type'])['price_usd'].mean().reset_index()
+            vendor_price_df = price_source_df.groupby("vendor").agg(
+                avg_price_usd=("price_usd", "mean"),
+                products=("vendor", "size"),
+            ).reset_index().sort_values("avg_price_usd", ascending=False).head(20).rename(columns={
+                "vendor": "Vendor",
+                "avg_price_usd": "Average Price USD",
+                "products": "Observed Products",
+            })
+            render_ranked_bar_chart(
+                vendor_price_df,
+                "Average Price USD",
+                "Vendor",
+                ["Vendor", "Average Price USD", "Observed Products"],
+                title="Average Price, USD",
+                color="#A0442D",
+                height=460,
+            )
+            show_table(
+                price_df.rename(columns={
+                    "vendor": "Vendor",
+                    "product_type": "Product Type",
+                    "price_usd": "Average Price USD",
+                }),
+                "Shopify /products.json endpoints stored in competitor_products.",
+                "Grouped by vendor and product_type; mean price of observed products.",
+            )
+
+        st.subheader("Positioning Whitespace Candidates")
+        render_story_card(
+            "Why these rows matter",
+            "Low-scoring products are not necessarily bad products. They are examples where copy may leave a modern US customer confused, underwhelmed, or unsure why the product matters.",
+            "These are useful references for what Southern Frontier can improve: clearer benefits, cleaner packaging language, better origin proof, and a more accessible ritual.",
+            "The current rule flags products with a modern-authenticity score at or below 4."
+        )
+        if 'product_url' not in comp_df.columns:
+            comp_df['product_url'] = None
+        if "positioning_score" in comp_df.columns:
+            weak_df = comp_df[comp_df['positioning_score'] <= 4].copy()
+            if not weak_df.empty:
+                cols_to_show = ['vendor', 'title', 'product_type', 'price_usd', 'positioning_score', 'product_url']
+                cols_to_show = [col for col in cols_to_show if col in weak_df.columns]
+                show_table(
+                    weak_df[cols_to_show],
+                    "competitor_products table from Shopify product feeds, scored by Gemini using the Modern Authenticity rubric.",
+                    "Rows shown have positioning_score <= 4 and are treated as copy/positioning whitespace candidates.",
+                    column_config={"product_url": st.column_config.LinkColumn("Product Link")}
+                )
+                st.download_button(
+                    "Download Whitespace Candidates CSV",
+                    weak_df[cols_to_show].to_csv(index=False).encode("utf-8"),
+                    "sf_competitor_whitespace.csv",
+                    "text/csv",
+                )
+            else:
+                st.info("No Modern Authenticity targets found.")
+        else:
+            st.info("Positioning scores are not available in the current competitor table.")
+    else:
+        st.info("No ecommerce competitor data available yet.")
+
+    st.header("Cafe and Retail Competitor Intelligence")
+    render_story_card(
+        "What this informs",
+        "Cafe and retail benchmarks are the right lens for menu, drink architecture, ritual theater, design language, and the bridge from first sip to future product purchase.",
+        "This is not about copying their store footprint. It is about learning which experience cues make an unfamiliar tea desirable enough to join a list, attend a tasting, start a partnership conversation, or later buy online.",
+        "The strongest competitor lessons should feed the GTM physical proof lab and future menu design."
     )
     if not cafe_comp_df.empty and "overall_positioning_score" in cafe_comp_df.columns:
         cafe_display = cafe_comp_df[[
@@ -1641,20 +1935,9 @@ with tab3:
             full_text=True,
         )
 
-    st.subheader("One Flagship to Lead-Capture and Future Commerce Bridge")
-    render_website_links(["Flagship Store", "Products"])
-    show_table(
-        build_cafe_bridge_table(),
-        "Derived from Southern Frontier website product and store positioning.",
-        "Maps high-touch flagship moments to near-term lead capture, content, partnership, and future commerce paths.",
-        full_text=True,
-    )
-
     st.subheader("Collected Cafe / Retail Signals")
     if not cafe_signal_df.empty:
-        signal_display = cafe_signal_df[[
-            "competitor_name", "signal_type", "title", "snippet", "url"
-        ]].rename(columns={
+        signal_display = cafe_signal_df[["competitor_name", "signal_type", "title", "snippet", "url"]].rename(columns={
             "competitor_name": "Competitor",
             "signal_type": "Signal Type",
             "title": "Title",
@@ -1664,364 +1947,99 @@ with tab3:
         show_table(
             signal_display,
             "cafe_retail_signals table populated by cafe_competitor_pipeline.py via Serper search.",
-            "Collected easy public signals: menu/drink pricing snippets, review language, visual/store cues, and cafe-to-product bridge evidence. These are snippets, not verified full menu/review datasets.",
+            "Collected public signals: menu/drink pricing snippets, review language, visual/store cues, and cafe-to-product bridge evidence.",
             full_text=True,
             column_config={"Source Link": st.column_config.LinkColumn("Source Link")},
         )
     else:
         st.info("No cafe retail signal rows found yet. Run cafe_competitor_pipeline.py to collect public search evidence.")
 
-    st.subheader("What Still Needs Manual or Specialized Collection")
-    next_collection = pd.DataFrame([
-        {
-            "Data": "Verified menu prices",
-            "Why": "Search snippets expose some menu hints, but exact drink prices need menu pages, photos, or manual capture.",
-            "Possible Source": "Official menus, Google Business photos, manual capture",
-        },
-        {
-            "Data": "Flagship-market fit",
-            "Why": "Choose one store or pop-up city based on high learning value, content potential, partner access, and brand-signal quality.",
-            "Possible Source": "Census launch-market table, cafe competitor density, creator/community presence",
-        },
-        {
-            "Data": "Cafe-to-lead conversion",
-            "Why": "Measure whether a limited physical experience can drive newsletter signups, tasting RSVPs, partner conversations, and future commerce intent.",
-            "Possible Source": "Future Southern Frontier tests: QR codes, email capture, landing pages, partner inquiry forms",
-        },
-    ])
-    show_table(
-        next_collection,
-        "Proposed data collection plan.",
-        "This section is intentionally framed as a roadmap because cafe intelligence requires different sources than Shopify product scraping.",
-        full_text=True,
-    )
-
-with tab4:
-    st.header("Quantitative Insights")
-    st.subheader("Google Trends: Macro Search Volume Trajectory")
+with tab_positioning:
+    st.header("Brand Positioning")
     render_story_card(
-        "How to read this",
-        "Google Trends scales are normalized within each query payload, so cross-chart 80s are not equal.",
-        "The pipeline currently queries matcha/specialty coffee together, and pu'er spellings together. That means a value of 80 in the benchmark chart and a value of 80 in the pu'er chart do not represent the same absolute search volume.",
-        "Best practice: visualize adjacent benchmarks separately from pu'er variants, then compare indexed growth or rerun collection with a shared anchor term if absolute cross-category comparison is required."
+        "Synthesis from macro and competitors",
+        "This tab distills macro market signals and competitor intelligence into brand-positioning hypotheses.",
+        "Google Trends and YouTube/PAA language inform what the market understands and fears. Competitor intelligence shows the gaps in pricing, education, menu, design, and experience. The output here is not final strategy; it is what to test next.",
+        "Keep this tab synthesis-only so it does not duplicate the evidence tabs."
     )
-    if not trends_df.empty:
-        trend_keywords = sorted(trends_df["keyword"].dropna().unique())
-        render_source_note(
-            "Google Trends via pytrends, stored in google_trends_data.",
-            f"Current stored keywords: {', '.join(trend_keywords)}. Requested pu'er variants were puerh, puer, pu'er, Pu-erh, and pu erh; pytrends returned/stored three distinct pu'er columns in this run."
+    render_strategic_insight_overview(signal_summary, comp_summary, launch_market_df)
+
+    st.header("Audience and Message Prioritization")
+    render_story_card(
+        "From language to launch audiences",
+        "The dashboard turns raw consumer language into actionable audience and message hypotheses.",
+        "This segment model is intentionally simple and explainable for a case study. It should guide product format, channel, offer, and message tests, not replace real customer research.",
+        "Use the scores as a prioritization queue for experiments."
+    )
+    if not segment_df.empty:
+        top_segment = segment_df.iloc[0]
+        cols = st.columns(4)
+        cols[0].metric("Top Segment", top_segment["segment"])
+        cols[1].metric("Segment Mentions", int(top_segment["mentions"]))
+        cols[2].metric("Avg Alignment", f"{top_segment['avg_alignment']:.1f}/10")
+        cols[3].metric("Opportunity Score", f"{top_segment['opportunity_score']:.1f}")
+
+        display_segments = segment_df.rename(columns={
+            "segment": "Segment",
+            "mentions": "Mentions",
+            "avg_transparency": "Transparency",
+            "avg_ritual": "Ritual",
+            "avg_energy": "Energy",
+            "avg_alignment": "Alignment",
+            "opportunity_score": "Opportunity Score",
+        })
+        st.subheader("Segment Opportunity Ranking")
+        render_ranked_bar_chart(
+            display_segments,
+            "Opportunity Score",
+            "Segment",
+            ["Segment", "Opportunity Score", "Mentions", "Alignment", "Transparency", "Ritual", "Energy"],
+            title="Opportunity Score",
+            color="#2B4533",
+            height=260,
         )
-
-        trends_for_chart = trends_df.copy()
-        trends_for_chart["family"] = trends_for_chart["keyword"].apply(trend_family)
-        benchmark_df = trends_for_chart[trends_for_chart["family"] == "Adjacent benchmark"]
-        puer_df = trends_for_chart[trends_for_chart["family"] == "Pu'er variants"]
-
-        if not benchmark_df.empty:
-            st.markdown("**Adjacent Benchmark Terms**")
-            max_date = benchmark_df['date'].max()
-            label_df = benchmark_df[benchmark_df['date'] == max_date]
-            
-            bench_chart = alt.Chart(benchmark_df).mark_line(strokeWidth=2).encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("interest:Q", title="Search Interest"),
-                color=alt.Color("keyword:N", title="Keyword", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"])),
-                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("interest:Q")],
-            )
-            labels = alt.Chart(label_df).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
-                x=alt.X("date:T"),
-                y=alt.Y("interest:Q"),
-                text="keyword:N",
-                color=alt.Color("keyword:N", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"]))
-            )
-            st.altair_chart((bench_chart + labels).properties(height=320), use_container_width=True)
-
-        if not puer_df.empty:
-            strongest_spelling = puer_df.groupby('keyword')['interest'].mean().idxmax()
-            st.markdown(f"**Pu'er Spelling Variants** (Strongest: `{strongest_spelling}`) ")
-            max_date_puer = puer_df['date'].max()
-            label_df_puer = puer_df[puer_df['date'] == max_date_puer]
-            
-            puer_chart = alt.Chart(puer_df).mark_line(strokeWidth=2).encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("interest:Q", title="Search Interest"),
-                color=alt.Color("keyword:N", title="Spelling", scale=alt.Scale(range=["#2B4533", "#A0442D", "#D9BD7E", "#6E6258", "#8B5E3C"])),
-                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("interest:Q")],
-            )
-            labels_puer = alt.Chart(label_df_puer).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
-                x=alt.X("date:T"),
-                y=alt.Y("interest:Q"),
-                text="keyword:N",
-                color=alt.Color("keyword:N", scale=alt.Scale(range=["#2B4533", "#A0442D", "#D9BD7E", "#6E6258", "#8B5E3C"]))
-            )
-            st.altair_chart((puer_chart + labels_puer).properties(height=320), use_container_width=True)
-
-        if not puer_composite_df.empty:
-            st.markdown("**Pu'er Composite Demand Signal**")
-            comp_melt = puer_composite_df.melt(id_vars=["date"], var_name="metric", value_name="interest")
-            max_date_comp = comp_melt['date'].max()
-            label_df_comp = comp_melt[comp_melt['date'] == max_date_comp]
-
-            comp_chart = alt.Chart(comp_melt).mark_line(strokeWidth=2).encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("interest:Q", title="Interest"),
-                color=alt.Color("metric:N", title="Metric", scale=alt.Scale(range=["#A0442D", "#2B4533"])),
-                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("metric:N"), alt.Tooltip("interest:Q")],
-            )
-            labels_comp = alt.Chart(label_df_comp).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
-                x=alt.X("date:T"),
-                y=alt.Y("interest:Q"),
-                text="metric:N",
-                color=alt.Color("metric:N", scale=alt.Scale(range=["#A0442D", "#2B4533"]))
-            )
-            st.altair_chart((comp_chart + labels_comp).properties(height=320), use_container_width=True)
-
-        if not indexed_trends_df.empty:
-            st.markdown("**Indexed Growth View, First Non-Zero Week = 100**")
-            render_source_note(
-                "Derived from google_trends_data.",
-                "This view compares growth direction rather than absolute volume. It is safer for comparing terms collected in different TrendReq payloads."
-            )
-            max_date_idx = indexed_trends_df['date'].max()
-            label_df_idx = indexed_trends_df[indexed_trends_df['date'] == max_date_idx]
-
-            idx_chart = alt.Chart(indexed_trends_df).mark_line(strokeWidth=2).encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("indexed_interest:Q", title="Indexed Interest (baseline = 100)"),
-                color=alt.Color("keyword:N", title="Keyword", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"])),
-                tooltip=[alt.Tooltip("date:T"), alt.Tooltip("keyword:N"), alt.Tooltip("indexed_interest:Q", format=".1f")],
-            )
-            labels_idx = alt.Chart(label_df_idx).mark_text(align='left', dx=5, fontSize=11, fontWeight='bold').encode(
-                x=alt.X("date:T"),
-                y=alt.Y("indexed_interest:Q"),
-                text="keyword:N",
-                color=alt.Color("keyword:N", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"]))
-            )
-            st.altair_chart((idx_chart + labels_idx).properties(height=320), use_container_width=True)
-    else:
-        st.info("No Google Trends data available yet.")
-        
-    st.header("Competitor Intelligence")
-    render_story_card(
-        "How to read this",
-        "Pricing tells you where the market already gives permission.",
-        "A premium tea launch does not need to be the cheapest option. It needs an entry product that feels low-risk and a hero product that makes the brand world desirable.",
-        "Look for the price band where modern brands can explain value without forcing customers into expert-level tea knowledge."
-    )
-    render_story_card(
-        "How positioning score is computed",
-        "Modern Authenticity is an LLM rubric applied to product title and description.",
-        "A score of 10 means the copy bridges ancient heritage with modern, transparent, premium design. A score of 1 means it feels either sterile/soulless or overly esoteric/confusing. The scoring prompt lives in competitor_pipeline.py and batch_competitor_pipeline.py.",
-        "This is a directional content-quality score, not a consumer survey. It should be audited with examples and eventually calibrated against human labels."
-    )
-    if not comp_df.empty:
-        if "positioning_score" in comp_df.columns and "vendor" in comp_df.columns:
-            st.subheader("Modern Authenticity by Vendor")
-            render_story_card(
-                "Authenticity spread",
-                "This view shows the distribution of Modern Authenticity scores for individual products across vendors.",
-                "The red lines indicate the vendor's average score.",
-            )
-            stripplot = alt.Chart(comp_df).mark_circle(size=50, opacity=0.5, color="#6E6258").encode(
-                x=alt.X("vendor:N", title="Vendor", axis=alt.Axis(labelAngle=-45)),
-                xOffset="jitter:Q",
-                y=alt.Y("positioning_score:Q", title="Modern Authenticity Score", scale=alt.Scale(domain=[0, 10])),
-                tooltip=["vendor:N", "title:N", "positioning_score:Q"]
-            ).transform_calculate(jitter="random()")
-            
-            avg_plot = alt.Chart(comp_df).mark_tick(
-                color="#A0442D",
-                thickness=3,
-                size=40
-            ).encode(
-                x=alt.X("vendor:N"),
-                y=alt.Y("mean(positioning_score):Q", title="Modern Authenticity Score"),
-                tooltip=[alt.Tooltip("vendor:N"), alt.Tooltip("mean(positioning_score):Q", format=".1f", title="Average Score")]
-            )
-            
-            st.altair_chart((stripplot + avg_plot).properties(height=400), use_container_width=True)
-            
-            render_source_note(
-                "Individual products (dots) and vendor average (red line).",
-                "Stored in competitor_products, scored by Gemini."
-            )
-
-        st.subheader("Average Price by Vendor and Product Type")
-        if {"vendor", "product_type", "price_usd"}.issubset(comp_df.columns):
-            price_df = comp_df.groupby(['vendor', 'product_type'])['price_usd'].mean().reset_index()
-            price_pivot = price_df.pivot(index="vendor", columns="product_type", values="price_usd").fillna(0)
-            render_source_note(
-                "Shopify /products.json endpoints stored in competitor_products.",
-                "Price is the first listed variant price in USD where available. Product type is the merchant-provided Shopify product_type."
-            )
-            price_chart = alt.Chart(price_df).mark_bar(color="#A0442D", opacity=0.85).encode(
-                x=alt.X("price_usd:Q", title="Average Price (USD)"),
-                y=alt.Y("vendor:N", title="Vendor", sort="-x"),
-                color=alt.Color("product_type:N", title="Product Type", scale=alt.Scale(range=["#A0442D", "#D9BD7E", "#2B4533", "#6E6258", "#8B5E3C"])),
-                tooltip=[alt.Tooltip("vendor:N"), alt.Tooltip("product_type:N"), alt.Tooltip("price_usd:Q", format="$.2f")],
-            ).properties(height=400)
-            st.altair_chart(price_chart, use_container_width=True)
-            show_table(
-                price_df.rename(columns={
-                    "vendor": "Vendor",
-                    "product_type": "Product Type",
-                    "price_usd": "Average Price USD",
-                }),
-                "Shopify /products.json endpoints stored in competitor_products.",
-                "Grouped by vendor and product_type; mean price of observed products.",
-            )
-
-            render_source_note(
-                "Weight data note.",
-                "Shopify public product feeds in this project do not provide reliable structured tea weight. The earlier regex-based weight inference was removed from the dashboard because it produced noisy estimates."
-            )
-        else:
-            st.info("Price data is not available in the current competitor table.")
-        
-        st.subheader("Positioning Whitespace Candidates")
-        render_story_card(
-            "Why these rows matter",
-            "Low-scoring products are not necessarily bad products. They are examples where the copy may leave a modern US customer confused, underwhelmed, or unsure why the product matters.",
-            "These are useful references for what Southern Frontier can improve: clearer benefits, cleaner packaging language, better origin proof, and a more accessible ritual.",
-            "The current rule flags products with a modern-authenticity score at or below 4."
-        )
-        if 'product_url' not in comp_df.columns:
-            comp_df['product_url'] = None
-            
-        if "positioning_score" not in comp_df.columns:
-            st.info("Positioning scores are not available in the current competitor table.")
-        else:
-            weak_df = comp_df[comp_df['positioning_score'] <= 4].copy()
-        if "positioning_score" in comp_df.columns and not weak_df.empty:
-            cols_to_show = ['vendor', 'title', 'product_type', 'price_usd', 'positioning_score', 'product_url']
-            cols_to_show = [col for col in cols_to_show if col in weak_df.columns]
-            show_table(
-                weak_df[cols_to_show],
-                "competitor_products table from Shopify product feeds, scored by Gemini using the Modern Authenticity rubric.",
-                "Rows shown have positioning_score <= 4 and are treated as copy/positioning whitespace candidates.",
-                column_config={
-                    "product_url": st.column_config.LinkColumn("Product Link")
-                }
-            )
-            st.download_button(
-                "Download Whitespace Candidates CSV",
-                weak_df[cols_to_show].to_csv(index=False).encode("utf-8"),
-                "sf_competitor_whitespace.csv",
-                "text/csv",
-            )
-        else:
-            st.info("No Modern Authenticity targets found.")
-    else:
-        st.info("No competitor data available yet.")
-        
-
-    st.header("Consumer Desires and Friction")
-    if signal_summary:
-        score_text = " ".join([
-            f"<span class='evidence-pill'>{escape(label.replace('_', ' ').title())}: {score:.1f}/10</span>"
-            for label, score in signal_summary["scores"].items()
-        ])
-        st.markdown(score_text, unsafe_allow_html=True)
-        render_story_card(
-            "What the language is saying",
-            f"The leading desire is {signal_summary['top_signal']}.",
-            "The practical implication is that Southern Frontier should choose one primary promise for the first launch campaign, then use the other vectors as supporting proof.",
-            "A focused brand wedge is easier to test than a broad claim that tries to be heritage, wellness, luxury, taste, ritual, and energy all at once."
-        )
-    
-    st.subheader("Brand Alignment Over Time")
-    if 'source_url' not in df.columns:
-        df['source_url'] = None
-    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
-    chart_data = df.groupby('timestamp')['premium_accessibility_score'].mean().reset_index()
-    chart_data.columns = ["Date", "Avg Brand Alignment"]
-    render_source_note(
-        "friction_data table.",
-        "premium_accessibility_score = average of transparency_desire, brewing_theater, and grounded_energy_desire from Gemini-scored PAA/transcript snippets."
-    )
-    alignment_chart = alt.Chart(chart_data).mark_line(strokeWidth=2.5, color="#2B4533").encode(
-        x=alt.X("Date:T", title="Date"),
-        y=alt.Y("Avg Brand Alignment:Q", title="Avg Brand Alignment Score", scale=alt.Scale(domain=[0, 10])),
-        tooltip=[alt.Tooltip("Date:T"), alt.Tooltip("Avg Brand Alignment:Q", format=".1f")],
-    ).properties(height=300)
-    st.altair_chart(alignment_chart, use_container_width=True)
-    
-    st.markdown("---")
-    st.subheader("High-Signal Consumer Evidence")
-    render_story_card(
-        "Why these excerpts matter",
-        "These are the snippets most likely to contain usable customer language.",
-        "When you write ads, packaging, creator briefs, or a landing page, this table should be mined for phrases that make the customer feel recognized.",
-        "The current filter shows records with strong grounded-energy or transparency scores."
-    )
-    high_theater_df = df[(df['transparency_desire'] >= 8) | (df['grounded_energy_desire'] >= 8)].copy()
-    if not high_theater_df.empty:
-        cols_to_show = ['source_type', 'transparency_desire', 'grounded_energy_desire', 'summary', 'source_text', 'source_url']
         show_table(
-            high_theater_df[cols_to_show], 
-            "friction_data table from Google PAA and YouTube transcripts, scored by Gemini.",
-            "Rows shown have transparency_desire >= 8 or grounded_energy_desire >= 8. Full text is wrapped with taller rows.",
-            full_text=True,
-            column_config={
-                "source_url": st.column_config.LinkColumn("Source Link"),
-                "source_type": st.column_config.TextColumn("Source", width="small")
-            }
+            display_segments,
+            "friction_data table populated by Google People Also Ask and YouTube transcript collection, scored by Gemini.",
+            "Segments are classified by Gemini. Opportunity Score (0-100) = alignment (40%) + volume rank (30%).",
+        )
+
+        st.subheader("Recommended Test Queue")
+        show_table(
+            opportunity_df[["Opportunity", "Segment", "Score", "Recommended test"]] if not opportunity_df.empty else pd.DataFrame(),
+            "Derived from macro language signals, directional trend context, and competitor whitespace assumptions.",
+            "Each row should become an experiment before it is treated as a GTM decision.",
         )
     else:
-        st.info("No highly aligned consumer records found yet.")
+        st.info("No segment table is available yet.")
 
-    if not scored_mentions.empty:
-        st.subheader("Scored Mentions With Segment Labels")
-        cols_to_show = [
-            "segment", "source_type", "transparency_desire", "brewing_theater",
-            "grounded_energy_desire", "premium_accessibility_score", "summary", "source_url"
-        ]
-        cols_to_show = [col for col in cols_to_show if col in scored_mentions.columns]
-        show_table(
-            scored_mentions[cols_to_show],
-            "friction_data table with rule-based segment labels added in the dashboard.",
-            "Segment labels are explainable keyword/score heuristics used for GTM planning.",
-            full_text=True,
-            column_config={
-                "source_url": st.column_config.LinkColumn("Source Link") if "source_url" in cols_to_show else None,
-                "segment": st.column_config.TextColumn("Segment", width="small"),
-                "source_type": st.column_config.TextColumn("Source", width="small")
-            },
-        )
-
-with tab5:
     st.header("Message Tests")
     render_story_card(
         "From insight to copy hypotheses",
-        "This engine turns high-scoring evidence into copy directions for structured tests.",
-        "Use the generated outputs as hypotheses, not final brand copy. The best next step is to test them against a brand landing page, waitlist, partner inquiry flow, creator script, tasting RSVP, or paid-social audience.",
-        "Every generated rationale should trace back to the highest-alignment records, so the case study can show a clear path from raw text to strategy."
+        "Generated value propositions are test assets, not final brand copy.",
+        "The generator now uses a broader evidence packet: macro signals, consumer language, ecommerce competitor gaps, cafe/retail benchmarks, brand context, GTM context, and market prioritization.",
+        "Every generated rationale should cite cross-dashboard evidence IDs, not just a few YouTube snippets."
     )
-
-    if not opportunity_df.empty:
-        st.subheader("Recommended Test Queue")
-        show_table(
-            opportunity_df[["Opportunity", "Segment", "Score", "Recommended test"]],
-            "Derived from audience segments, Google Trends direction, competitor whitespace, and brand strategy assumptions.",
-            "Each row should become an experiment before it is treated as a GTM decision.",
-        )
-
     top_records = df.nlargest(20, 'premium_accessibility_score')
-    evidence = extract_evidence(top_records, max_items=5)
-    with st.expander("Evidence packet used for generated copy", expanded=False):
-        for item in evidence:
-            link_text = f" | {item['source_url']}" if item["source_url"] else ""
-            st.markdown(f"**{item['id']} - {item['source_type']}**{link_text}\n\n{item['summary']}")
-    
-    if st.button("Re-generate Value Props", type="primary"):
-        with st.spinner("Analyzing top sentiment data and generating value props..."):
-            value_props = generate_value_props(top_records)
-
+    evidence_sections = build_value_prop_evidence_packet(
+        top_records=top_records,
+        trend_summary=trend_summary,
+        signal_summary=signal_summary,
+        comp_summary=comp_summary,
+        comp_df=comp_df,
+        cafe_comp_df=cafe_comp_df,
+        launch_market_df=launch_market_df,
+        opportunity_df=opportunity_df,
+    )
+    with st.expander("Broad evidence packet used for generated copy", expanded=False):
+        for section in evidence_sections:
+            st.markdown(f"**{section['id']} - {section['title']}**\n\n{section['body']}")
+    if st.button("Re-generate Value Props from Full Evidence Packet", type="primary"):
+        with st.spinner("Synthesizing macro, competitor, brand, GTM, and consumer evidence..."):
+            value_props = generate_value_props(evidence_sections)
             if value_props:
                 save_value_props(value_props)
                 st.success("Value Propositions Generated and Saved!")
-
-    # Always show the latest persisted value props
     saved_vps, saved_at = load_latest_value_props()
     if saved_vps:
         if saved_at:
@@ -2039,15 +2057,108 @@ with tab5:
                 </div>
                 """, unsafe_allow_html=True)
     else:
-        st.info("No value props generated yet. Click 'Re-generate Value Props' to create your first set.")
+        st.info("No value props generated yet. Click 'Re-generate Value Props from Full Evidence Packet' to create your first set.")
 
-with tab6:
+with tab_gtm:
+    st.header("GTM Strategy")
+    render_story_card(
+        "From positioning to market entry",
+        "The recommended strategy is staged: website first, one physical proof lab second, ecommerce later.",
+        "Macro signals inform the brand story. Competitor intelligence informs pricing, menu, design, and experience. Census data belongs here because it helps prioritize where physical tests, pop-ups, partnerships, or a future storefront could happen.",
+        "This tab converts positioning into channel and market-entry decisions."
+    )
+    render_staged_gtm_strategy()
+
+    st.header("Physical Proof Lab and Cafe Bridge")
+    render_story_card(
+        "Role of the physical experience",
+        "Southern Frontier is not only a tea product brand; it is a hospitality and ritual brand.",
+        "The US strategy does not need a costly multi-store rollout. One flagship, pop-up, or partner experience can become a learning lab, content engine, sensory proof point, and lead-capture bridge while ecommerce remains a future roadmap layer.",
+        "Use competitor intelligence to shape the menu and experience; use Census and partner signals to decide where to test."
+    )
+    cols = st.columns(4)
+    cols[0].metric("Experience Wedge", "To-go + ritual")
+    cols[1].metric("Bridge Drink", "Pu'er latte")
+    cols[2].metric("Trust Cue", "Visible proof")
+    cols[3].metric("Home Bridge", "Sampler / bundle")
+
+    st.subheader("One Flagship to Lead-Capture and Future Commerce Bridge")
+    render_website_links(["Flagship Store", "Products"])
+    show_table(
+        build_cafe_bridge_table(),
+        "Derived from Southern Frontier website product and store positioning.",
+        "Maps high-touch flagship moments to near-term lead capture, content, partnership, and future commerce paths.",
+        full_text=True,
+    )
+
+    st.header("Launch-Market Prioritization")
+    render_story_card(
+        "Census-powered GTM lens",
+        "The dashboard ranks US metro areas for early testing potential.",
+        "This uses Census ACS population, household income, higher-education proxy, and Asian diaspora share where available. It should guide where to test partnerships, creator seeding, cafe collaborations, events, and paid geo-targeting first.",
+        "This is a GTM prioritization input, not an automatic lease-location recommendation."
+    )
+    if not launch_market_df.empty:
+        top_market = launch_market_df.iloc[0]
+        cols = st.columns(4)
+        cols[0].metric("Top Launch Market", top_market["geography"].replace(" Metro Area", "").replace(" Micro Area", ""))
+        cols[1].metric("Launch Score", f"{top_market['launch_score']:.1f}")
+        cols[2].metric("Median Income", f"${top_market['median_household_income']:,.0f}")
+        cols[3].metric("Population", f"{top_market['population']:,.0f}")
+        st.subheader("Top Launch Markets by Score")
+        render_launch_market_chart(launch_market_df)
+        has_asian = "asian_population_pct" in launch_market_df.columns
+        display_cols = ["geography", "launch_score", "Strategic read", "population", "median_household_income", "education_proxy"]
+        rename_map = {
+            "geography": "Market",
+            "launch_score": "Launch Score",
+            "population": "Population",
+            "median_household_income": "Median Household Income",
+            "education_proxy": "Education Proxy",
+        }
+        if has_asian:
+            display_cols.insert(3, "asian_population_pct")
+            rename_map["asian_population_pct"] = "Asian Pop %"
+        market_display = launch_market_df.head(25)[[c for c in display_cols if c in launch_market_df.columns]].rename(columns=rename_map)
+        formula_text = (
+            "Launch Score = income (30%) + education (30%) + population (25%) + Asian pop % (15%)."
+            if has_asian
+            else "Launch Score = income (35%) + education (35%) + population (30%). Run census_pipeline.py to add Asian diaspora data."
+        )
+        show_table(
+            market_display,
+            "US Census ACS 2024 acs1 API, stored in metro_demographics.",
+            formula_text,
+        )
+        st.download_button(
+            "Download Launch Markets CSV",
+            market_display.to_csv(index=False).encode("utf-8"),
+            "sf_launch_markets.csv",
+            "text/csv",
+        )
+    else:
+        st.info("No Census metro demographics found yet. Run census_pipeline.py after adding CENSUS_API_KEY.")
+
+    st.subheader("What Still Needs Manual or Specialized Collection")
+    next_collection = pd.DataFrame([
+        {"Data": "Verified menu prices", "Why": "Search snippets expose menu hints, but exact drink prices need menu pages, photos, or manual capture.", "Possible Source": "Official menus, Google Business photos, manual capture"},
+        {"Data": "Flagship-market fit", "Why": "Choose one store or pop-up city based on learning value, content potential, partner access, and brand-signal quality.", "Possible Source": "Census launch-market table, cafe competitor density, creator/community presence"},
+        {"Data": "Cafe-to-lead conversion", "Why": "Measure whether a limited physical experience can drive newsletter signups, tasting RSVPs, partner conversations, and future commerce intent.", "Possible Source": "Future Southern Frontier tests: QR codes, email capture, landing pages, partner inquiry forms"},
+    ])
+    show_table(
+        next_collection,
+        "Proposed GTM data collection plan.",
+        "These collection gaps connect physical-market selection to measurable learning.",
+        full_text=True,
+    )
+
+with tab_learning_loop:
     st.header("Learning Loop")
     render_story_card(
         "Why this completes the loop",
         "The dashboard should not end at insight. Each finding needs a lightweight market test so you can learn before committing brand, product, or channel budget.",
         "This tracker turns the analysis into a repeatable operating system: hypothesis, audience, channel, creative angle, success metric, result, decision.",
-        "For the AI/DS case study, this is where you show how analytics becomes an experiment backlog."
+        "For the AI/DS case study, this is where analytics becomes an experiment backlog."
     )
 
     with st.form("new_experiment"):
@@ -2121,14 +2232,13 @@ with tab6:
     else:
         st.info("No saved experiments yet.")
 
-    # ── Decisions Log ──────────────────────────────────────────────────────
     st.markdown("---")
     st.subheader("Decisions Log")
     render_story_card(
         "From experiments to decisions",
         "Experiments produce results, but results need decisions.",
-        "Track what was decided, what evidence it was based on, who owns it, and whether it's been executed.",
-        "This closes the loop from data → experiment → decision → action."
+        "Track what was decided, what evidence it was based on, who owns it, and whether it has been executed.",
+        "This closes the loop from data -> experiment -> decision -> action."
     )
     with st.form("new_decision"):
         dec_text = st.text_area("Decision", value="")
