@@ -1800,6 +1800,46 @@ with tab_competitors:
                     "competitor_products table from Shopify feeds, scored by Gemini.",
                     "Vendor positioning score = average positioning_score across observed products for that vendor. This is a proxy until brand-level visual/site analysis is added.",
                 )
+
+                st.subheader("Modern Authenticity by Pu'er Specialist Vendors")
+                render_story_card(
+                    "Pu'er Landscape",
+                    "This chart filters the above view to only include dedicated Pu'er and specialty Chinese tea vendors.",
+                    "Comparing these vendors shows the pure-play competitive landscape Southern Frontier is entering.",
+                    "Notice if any pure-play vendors occupy the high-authenticity + high-accessibility quadrant."
+                )
+                puer_specialists = ["White2Tea", "Crimson Lotus Tea", "Yunnan Sourcing", "Farmerleaf", "Kuura"]
+                puer_plot_df = plot_df[plot_df["Vendor"].isin(puer_specialists)]
+                
+                if not puer_plot_df.empty:
+                    base_chart_puer = alt.Chart(puer_plot_df).encode(
+                        x=alt.X("Avg Price USD:Q", title="Average Observed Product Price, USD"),
+                        y=alt.Y("Avg Modern Authenticity:Q", title="Average Modern Authenticity Score", scale=alt.Scale(domain=[0, 10])),
+                        tooltip=[
+                            alt.Tooltip("Vendor:N"),
+                            alt.Tooltip("Avg Price USD:Q", format="$.2f"),
+                            alt.Tooltip("Avg Modern Authenticity:Q", format=".1f"),
+                            alt.Tooltip("Observed Products:Q"),
+                        ],
+                    )
+                    points_puer = base_chart_puer.mark_circle(color="#2B4533", opacity=0.85).encode(
+                        size=alt.Size("Observed Products:Q", title="Observed Products", scale=alt.Scale(range=[100, 800])),
+                    )
+                    labels_puer = base_chart_puer.mark_text(
+                        align="left",
+                        baseline="middle",
+                        dx=10,
+                        fontSize=12,
+                        fontWeight="bold",
+                        color="#1A1A1A",
+                    ).encode(text="Vendor:N")
+                    st.altair_chart((points_puer + labels_puer).properties(height=380), width="stretch")
+                    show_table(
+                        puer_plot_df.sort_values("Avg Modern Authenticity", ascending=False),
+                        "competitor_products table, filtered to pure-play Pu'er vendors.",
+                    )
+                else:
+                    st.info("No Pu'er specialist vendors found in the current dataset.")
             else:
                 st.info("No valid vendor price and positioning rows are available for this chart.")
 
