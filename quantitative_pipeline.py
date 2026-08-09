@@ -24,7 +24,7 @@ def setup_database():
     conn.commit()
     return conn, cur
 
-def fetch_google_trends(kw_list):
+def fetch_google_trends(kw_list, geo="US"):
     try:
         pytrends = TrendReq(
             hl='en-US', 
@@ -36,7 +36,7 @@ def fetch_google_trends(kw_list):
                 }
             }
         )
-        pytrends.build_payload(kw_list, cat=0, timeframe='today 12-m', geo='', gprop='')
+        pytrends.build_payload(kw_list, cat=0, timeframe='today 12-m', geo=geo, gprop='')
         df = pytrends.interest_over_time()
         if not df.empty:
             if 'isPartial' in df.columns:
@@ -50,19 +50,20 @@ def fetch_google_trends(kw_list):
             
         return df
     except Exception as e:
-        print(f"Error fetching Google Trends for {kw_list}: {e}")
+        print(f"Error fetching Google Trends for {kw_list} in geo={geo}: {e}")
         return pd.DataFrame()
 
 
 def main():
     conn, cur = setup_database()
     
-    print("Fetching Google Trends data...")
+    trends_geo = "US"
+    print(f"Fetching Google Trends data for geo={trends_geo}...")
     records = []
     
     # Keep this benchmark group to five terms so Google Trends returns one shared 0-100 scale.
     group1 = ["matcha", "specialty coffee", "puer", "boba tea", "kombucha"]
-    df1 = fetch_google_trends(group1)
+    df1 = fetch_google_trends(group1, geo=trends_geo)
     if not df1.empty:
         for index, row in df1.iterrows():
             for kw in group1:
@@ -70,17 +71,21 @@ def main():
                 records.append((index, saved_kw, int(row[kw])))
                 
     group2 = ["puerh", "puer", "pu'er", "Pu-erh", "pu erh"]
-    df2 = fetch_google_trends(group2)
+    df2 = fetch_google_trends(group2, geo=trends_geo)
     if not df2.empty:
         for index, row in df2.iterrows():
             for kw in group2:
                 records.append((index, kw, int(row[kw])))
                 
-    if records:
-        cur.execute("DELETE FROM google_trends_data")
-        insert_query = "INSERT INTO google_trends_data (date, keyword, interest) VALUES %s"
-        execute_values(cur, insert_query, records)
-        print(f"Inserted {len(records)} trends records.")
+    if not records:
+        cur.close()
+        conn.close()
+        raise RuntimeError("No Google Trends records were fetched; existing google_trends_data was left unchanged.")
+
+    cur.execute("DELETE FROM google_trends_data")
+    insert_query = "INSERT INTO google_trends_data (date, keyword, interest) VALUES %s"
+    execute_values(cur, insert_query, records)
+    print(f"Inserted {len(records)} trends records.")
     
 
     conn.commit()

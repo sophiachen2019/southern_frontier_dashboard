@@ -1620,7 +1620,7 @@ with tab_macro:
         trend_keywords = sorted(trends_df["keyword"].dropna().unique())
         render_source_note(
             "Google Trends via pytrends, stored in google_trends_data.",
-            f"Current stored keywords: {', '.join(trend_keywords)}."
+            f"Current pipeline/data are US-only. Stored keywords: {', '.join(trend_keywords)}."
         )
 
         trends_for_chart = trends_df.copy()
@@ -1744,7 +1744,17 @@ with tab_macro:
     )
     high_theater_df = df[(df['transparency_desire'] >= 8) | (df['grounded_energy_desire'] >= 8)].copy()
     if not high_theater_df.empty:
-        cols_to_show = ['source_type', 'transparency_desire', 'grounded_energy_desire', 'summary', 'source_text', 'source_url']
+        engagement_cols = [
+            col for col in [
+                'youtube_title', 'youtube_channel', 'youtube_view_count',
+                'youtube_like_count', 'youtube_comment_count', 'youtube_search_query'
+            ]
+            if col in high_theater_df.columns
+        ]
+        cols_to_show = [
+            'source_type', *engagement_cols, 'transparency_desire',
+            'grounded_energy_desire', 'summary', 'source_text', 'source_url'
+        ]
         show_table(
             high_theater_df[cols_to_show],
             "friction_data table from Google PAA and YouTube transcripts, scored by Gemini.",
@@ -1752,7 +1762,10 @@ with tab_macro:
             full_text=True,
             column_config={
                 "source_url": st.column_config.LinkColumn("Source Link"),
-                "source_type": st.column_config.TextColumn("Source", width="small")
+                "source_type": st.column_config.TextColumn("Source", width="small"),
+                "youtube_view_count": st.column_config.NumberColumn("YouTube Views", format="%d"),
+                "youtube_like_count": st.column_config.NumberColumn("YouTube Likes", format="%d"),
+                "youtube_comment_count": st.column_config.NumberColumn("YouTube Comments", format="%d"),
             }
         )
     else:

@@ -48,30 +48,48 @@ def fetch_serper_data(queries):
             print(f"Failed to fetch Serper data for '{q}': {response.status_code}")
     return all_questions
 def search_youtube_videos(queries, limit=5):
-    video_ids = []
+    videos_by_id = {}
     for q in queries:
         try:
-            # yt-dlp "ytsearch5:keyword" --get-id
-            cmd = ["yt-dlp", f"ytsearch{limit}:{q}", "--get-id", "--ignore-errors"]
+            cmd = ["yt-dlp", f"ytsearch{limit}:{q}", "--dump-json", "--ignore-errors", "--no-warnings"]
             result = subprocess.run(cmd, capture_output=True, text=True)
-            ids = result.stdout.strip().split('\n')
-            video_ids.extend([v.strip() for v in ids if v.strip()])
+            for line in result.stdout.splitlines():
+                try:
+                    video = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                video_id = video.get("id")
+                if not video_id:
+                    continue
+                videos_by_id[video_id] = {
+                    "video_id": video_id,
+                    "url": video.get("webpage_url") or f"https://www.youtube.com/watch?v={video_id}",
+                    "title": video.get("title"),
+                    "channel": video.get("channel") or video.get("uploader"),
+                    "view_count": video.get("view_count"),
+                    "like_count": video.get("like_count"),
+                    "comment_count": video.get("comment_count"),
+                    "duration": video.get("duration"),
+                    "upload_date": video.get("upload_date"),
+                    "search_query": q,
+                }
         except Exception as e:
             print(f"Failed to search YouTube using yt-dlp for '{q}': {e}")
-    # return unique IDs
-    return list(set(video_ids))
+    return list(videos_by_id.values())
 
 
-def fetch_youtube_transcripts(video_ids):
+def fetch_youtube_transcripts(video_records):
     transcripts = []
-    for vid in video_ids:
+    for video in video_records:
+        vid = video["video_id"]
         try:
             # Correct API usage for youtube_transcript_api 1.x
             transcript_list = YouTubeTranscriptApi().list(vid)
             transcript = transcript_list.find_transcript(['en']).fetch()
             # transcript is a list of snippet objects
             text = " ".join([getattr(t, 'text', str(t)) for t in transcript[:20]])
-            transcripts.append((text, f"https://www.youtube.com/watch?v={vid}"))
+            video["text"] = text
+            transcripts.append(video)
         except Exception as e:
             print(f"Failed to fetch transcript for {vid}: {e}")
             continue
@@ -125,10 +143,28 @@ def setup_database():
             summary TEXT,
             premium_accessibility_score FLOAT,
             source_url TEXT,
-            segment VARCHAR(80)
+            segment VARCHAR(80),
+            youtube_video_id VARCHAR(40),
+            youtube_title TEXT,
+            youtube_channel TEXT,
+            youtube_view_count BIGINT,
+            youtube_like_count BIGINT,
+            youtube_comment_count BIGINT,
+            youtube_duration_seconds INT,
+            youtube_upload_date DATE,
+            youtube_search_query TEXT
         )
     """)
     cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS segment VARCHAR(80);")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_video_id VARCHAR(40);")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_title TEXT;")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_channel TEXT;")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_view_count BIGINT;")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_like_count BIGINT;")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_comment_count BIGINT;")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_duration_seconds INT;")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_upload_date DATE;")
+    cur.execute("ALTER TABLE friction_data ADD COLUMN IF NOT EXISTS youtube_search_query TEXT;")
     conn.commit()
     return conn, cur
 
@@ -141,16 +177,29 @@ def main():
     
     youtube_keywords = ["pour over coffee aesthetic", "ceremonial matcha prep", "puerh tea routine"]
     print("Searching YouTube for dynamic videos...")
-    video_ids = search_youtube_videos(youtube_keywords, limit=5)
+    video_records = search_youtube_videos(youtube_keywords, limit=5)
     
-    print(f"Fetching transcripts for {len(video_ids)} YouTube videos...")
-    youtube_texts = fetch_youtube_transcripts(video_ids)
+    print(f"Fetching transcripts for {len(video_records)} YouTube videos...")
+    youtube_texts = fetch_youtube_transcripts(video_records)
     
     dataset = []
     for text, url in serper_texts:
         dataset.append({"text": text, "source_type": "Google PAA", "url": url})
-    for text, url in youtube_texts:
-        dataset.append({"text": text, "source_type": "YouTube Video", "url": url})
+    for video in youtube_texts:
+        dataset.append({
+            "text": video["text"],
+            "source_type": "YouTube Video",
+            "url": video["url"],
+            "youtube_video_id": video.get("video_id"),
+            "youtube_title": video.get("title"),
+            "youtube_channel": video.get("channel"),
+            "youtube_view_count": video.get("view_count"),
+            "youtube_like_count": video.get("like_count"),
+            "youtube_comment_count": video.get("comment_count"),
+            "youtube_duration_seconds": video.get("duration"),
+            "youtube_upload_date": video.get("upload_date"),
+            "youtube_search_query": video.get("search_query"),
+        })
         
     if not dataset:
         print("No data fetched. Check API keys.")
@@ -171,17 +220,28 @@ def main():
             summary = scores.get("summary", "")
             segment = scores.get("segment", "Curious premium drinkers")
             prem_acc_score = (trans_desire + brew_thea + ground_energy) / 3.0
+            upload_date = item.get("youtube_upload_date")
+            if upload_date and len(str(upload_date)) == 8:
+                upload_date = datetime.strptime(str(upload_date), "%Y%m%d").date()
+            else:
+                upload_date = None
             
             processed_records.append((
                 text, item["source_type"], datetime.now(),
-                trans_desire, brew_thea, ground_energy, summary, prem_acc_score, url, segment
+                trans_desire, brew_thea, ground_energy, summary, prem_acc_score, url, segment,
+                item.get("youtube_video_id"), item.get("youtube_title"), item.get("youtube_channel"),
+                item.get("youtube_view_count"), item.get("youtube_like_count"), item.get("youtube_comment_count"),
+                item.get("youtube_duration_seconds"), upload_date, item.get("youtube_search_query")
             ))
             
     print("Saving to Neon Postgres...")
     conn, cur = setup_database()
     insert_query = """
         INSERT INTO friction_data 
-        (source_text, source_type, timestamp, transparency_desire, brewing_theater, grounded_energy_desire, summary, premium_accessibility_score, source_url, segment)
+        (source_text, source_type, timestamp, transparency_desire, brewing_theater, grounded_energy_desire,
+         summary, premium_accessibility_score, source_url, segment, youtube_video_id, youtube_title,
+         youtube_channel, youtube_view_count, youtube_like_count, youtube_comment_count,
+         youtube_duration_seconds, youtube_upload_date, youtube_search_query)
         VALUES %s
     """
     execute_values(cur, insert_query, processed_records)
