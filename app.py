@@ -113,6 +113,32 @@ st.markdown("""
     .story-card { background: #FFFFFF; border: 1px solid #E7E3DA; border-radius: 8px; padding: 24px 26px; margin: 16px 0 20px; }
     .story-label { color: #A0442D; font-size: 0.86rem; font-weight: 750; text-transform: uppercase; letter-spacing: 1.3px; margin-bottom: 8px; }
     .story-title { color: #1A1A1A; font-size: 1.32rem; font-weight: 750; margin-bottom: 10px; line-height: 1.35; }
+    
+    /* SF Wrap Table for Adjustable Wrapping Tables */
+    .sf-wrap-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+        margin-bottom: 1.5rem;
+        background-color: white;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .sf-wrap-table th, .sf-wrap-table td {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+        word-wrap: break-word;
+        white-space: normal;
+    }
+    .sf-wrap-table th {
+        background-color: rgba(0,0,0,0.03);
+        font-weight: 600;
+        color: #444;
+        resize: horizontal;
+        overflow: auto;
+        min-width: 80px;
+    }
     .story-body { color: #323632; font-size: 1.12rem; line-height: 1.68; margin-bottom: 14px; }
     .story-rationale { color: #555B56; font-size: 1.02rem; line-height: 1.6; border-top: 1px solid #EEE9DF; padding-top: 12px; }
     
@@ -785,32 +811,6 @@ def show_table(df, source, method=None, height="content", column_config=None, hi
 
     html = display_df.to_html(escape=False, index=not hide_index)
     html_content = f"""
-<style>
-.sf-wrap-table {{
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.95rem;
-    margin-bottom: 1.5rem;
-    background-color: white;
-    border-radius: 4px;
-    overflow: hidden;
-}}
-.sf-wrap-table th, .sf-wrap-table td {{
-    text-align: left;
-    padding: 10px 14px;
-    border-bottom: 1px solid rgba(0,0,0,0.08);
-    word-wrap: break-word;
-    white-space: normal;
-}}
-.sf-wrap-table th {{
-    background-color: rgba(0,0,0,0.03);
-    font-weight: 600;
-    color: #444;
-    resize: horizontal;
-    overflow: auto;
-    min-width: 80px;
-}}
-</style>
 <div style="overflow-x: auto; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px;">
     {html.replace('<table border="1" class="dataframe">', '<table class="sf-wrap-table">')}
 </div>
