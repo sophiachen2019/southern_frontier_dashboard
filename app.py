@@ -1021,40 +1021,52 @@ def render_portfolio_brief():
 def render_question_framework():
     questions = pd.DataFrame([
         {
-            "Market Question": "Do US consumers already know Pu'er?",
-            "Useful Signal": "Google Trends, spelling variants, adjacent beverage terms",
-            "Dashboard Read": "Category Awareness",
-            "Decision": "Lead with Pu'er directly or borrow intent from matcha, coffee alternatives, wellness, and ritual beverages.",
+            "Market Question": "What does the broader market already understand or search for?",
+            "Useful Signal": "Google Trends, Pu'er spelling variants, adjacent beverage terms",
+            "Dashboard Tab": "Macro Signals",
+            "Decision": "Decide whether to lead with Pu'er directly or enter through adjacent narratives like matcha, coffee alternatives, gut health, and ritual beverages.",
         },
         {
-            "Market Question": "What makes Pu'er feel attractive or intimidating?",
+            "Market Question": "What language, curiosity, or friction should shape the brand story?",
             "Useful Signal": "People Also Ask, YouTube transcripts, LLM-coded themes",
-            "Dashboard Read": "Consumer Perception",
-            "Decision": "Decide what education, reassurance, and first-use guidance the brand must provide.",
+            "Dashboard Tab": "Macro Signals",
+            "Decision": "Identify the education, reassurance, and first-use guidance Southern Frontier must provide before asking for purchase intent.",
         },
         {
-            "Market Question": "Where is the competitive gap?",
+            "Market Question": "How do ecommerce tea vendors price, package, and explain premium tea?",
             "Useful Signal": "Shopify product feeds, price bands, Modern Authenticity scoring",
-            "Dashboard Read": "Competitor Gap",
-            "Decision": "Identify whether Southern Frontier can own modern craft with authentic roots.",
+            "Dashboard Tab": "Competitor Intelligence",
+            "Decision": "Inform future product architecture, pricing permission, proof language, merchandising, and ecommerce positioning.",
         },
         {
-            "Market Question": "Where should early tests happen?",
+            "Market Question": "How do cafe and retail competitors make premium beverage rituals approachable?",
+            "Useful Signal": "Cafe/retail search signals, menu cues, ritual theater, design and cafe-to-product bridge scores",
+            "Dashboard Tab": "Competitor Intelligence",
+            "Decision": "Inform menu, signature drinks, design cues, service flow, and the role of a physical proof lab.",
+        },
+        {
+            "Market Question": "What brand position should Southern Frontier test first?",
+            "Useful Signal": "Macro signals, competitor gaps, audience/message opportunity scores, broad evidence-packet value props",
+            "Dashboard Tab": "Brand Positioning",
+            "Decision": "Choose testable positioning directions rather than treating one brand concept as final.",
+        },
+        {
+            "Market Question": "Where should physical or market tests happen?",
             "Useful Signal": "Census ACS income, population density, education proxy, Asian diaspora share",
-            "Dashboard Read": "Early Markets",
-            "Decision": "Prioritize metros for paid tests, creator outreach, tastings, pop-ups, or cafe partnerships.",
+            "Dashboard Tab": "GTM Strategy",
+            "Decision": "Prioritize metros for paid tests, creator outreach, tastings, pop-ups, cafe partnerships, or eventual physical entry.",
         },
         {
-            "Market Question": "What should we test before investing more?",
+            "Market Question": "What should we test before committing more capital?",
             "Useful Signal": "Experiment backlog, value-prop tests, decision log",
-            "Dashboard Read": "Learning Loop",
+            "Dashboard Tab": "Learning Loop",
             "Decision": "Turn insights into small tests before committing to ecommerce, partnerships, or physical build-out.",
         },
     ])
     show_table(
         questions,
         "Analyst-defined market-entry question framework.",
-        "This is the dashboard spine: question -> signal -> insight -> decision.",
+        "This is the dashboard spine: question -> decision-domain signal -> decision.",
         full_text=True,
     )
 
@@ -1062,28 +1074,40 @@ def render_question_framework():
 def render_signal_map():
     signals = pd.DataFrame([
         {
-            "Decision Area": "Category awareness",
-            "Signal": "Search interest and spelling fragmentation",
+            "Decision Area": "Macro market signals",
+            "Signal": "Search interest, spelling fragmentation, adjacent beverage demand",
             "Source": "Google Trends via pytrends",
-            "Why It Matters": "Shows whether Pu'er has existing category vocabulary or needs an adjacent-entry strategy.",
+            "Why It Matters": "Shows whether Pu'er has existing category vocabulary or needs an adjacent-entry narrative.",
         },
         {
-            "Decision Area": "Consumer perception",
+            "Decision Area": "Macro consumer language",
             "Signal": "Questions, anxieties, benefits, and ritual language",
             "Source": "Google PAA, YouTube transcripts, Gemini scoring",
-            "Why It Matters": "Reveals what the website, creators, and tastings need to explain first.",
+            "Why It Matters": "Reveals what the brand, website, creators, and tastings need to explain first.",
         },
         {
-            "Decision Area": "Competitor landscape",
-            "Signal": "Observed products, prices, descriptions, and positioning scores",
+            "Decision Area": "Ecommerce competitors",
+            "Signal": "Observed products, prices, descriptions, product types, positioning scores",
             "Source": "Shopify feeds and LLM scoring",
-            "Why It Matters": "Identifies the gap between expertise without accessibility and polish without depth.",
+            "Why It Matters": "Informs pricing, product architecture, merchandising, and the gap between expertise without accessibility and polish without depth.",
         },
         {
-            "Decision Area": "Launch geography",
+            "Decision Area": "Cafe and retail competitors",
+            "Signal": "Menu cues, ritual theater, visual positioning, speed/ritual duality, cafe-to-product bridge",
+            "Source": "Serper search signals and Gemini scoring",
+            "Why It Matters": "Informs menu design, physical experience, signature drinks, service flow, and sensory trust-building.",
+        },
+        {
+            "Decision Area": "Brand positioning",
+            "Signal": "Synthesized macro, competitor, brand, GTM, and audience opportunity evidence",
+            "Source": "Dashboard evidence packet and LLM-generated value-prop tests",
+            "Why It Matters": "Turns evidence into testable positioning directions instead of a static brand claim.",
+        },
+        {
+            "Decision Area": "GTM market prioritization",
             "Signal": "Income, population, education proxy, Asian population percentage",
             "Source": "US Census ACS",
-            "Why It Matters": "Ranks where early paid media, tasting, partner, and creator tests may learn fastest.",
+            "Why It Matters": "Ranks where early paid media, tasting, pop-up, partner, creator, or future physical tests may learn fastest.",
         },
         {
             "Decision Area": "GTM learning",
@@ -1095,7 +1119,7 @@ def render_signal_map():
     show_table(
         signals,
         "Current public-data and dashboard-generated signal map.",
-        "Use this to explain the methodology at a business level without overwhelming readers with implementation details.",
+        "Use this to explain how each evidence domain supports a specific brand, competitor, GTM, or learning decision.",
         full_text=True,
     )
 
